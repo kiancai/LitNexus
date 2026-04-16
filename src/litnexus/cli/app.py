@@ -7,7 +7,7 @@ from typing import Annotated, Optional
 
 import typer
 
-from litnexus.cli import cmd_download, cmd_merge, cmd_translate, cmd_export, cmd_ask, cmd_sync, cmd_db
+from litnexus.cli import cmd_download, cmd_merge, cmd_translate, cmd_export, cmd_ask, cmd_db
 
 app = typer.Typer(
     name="litnexus",
@@ -20,9 +20,8 @@ app = typer.Typer(
 app.command("download")(cmd_download.download)
 app.command("merge")(cmd_merge.merge)
 app.command("translate")(cmd_translate.translate)
+app.command("classify")(cmd_ask.ask)
 app.command("export")(cmd_export.export)
-app.command("ask")(cmd_ask.ask)
-app.command("sync")(cmd_sync.sync)
 
 # db 子组
 db_app = typer.Typer(help="数据库管理命令", no_args_is_help=True)
@@ -34,16 +33,15 @@ app.add_typer(db_app, name="db")
 
 @app.command("run")
 def run(
-    from_step: Annotated[int, typer.Option(min=1, max=6, help="从第几步开始（1-6）")] = 1,
-    to_step: Annotated[int, typer.Option(min=1, max=6, help="到第几步结束（1-6）")] = 6,
+    from_step: Annotated[int, typer.Option(min=1, max=5, help="从第几步开始（1-5）")] = 1,
+    to_step: Annotated[int, typer.Option(min=1, max=5, help="到第几步结束（1-5）")] = 5,
     skip_steps: Annotated[Optional[str], typer.Option(help="跳过步骤，逗号分隔，如 '3,4'")] = None,
     mode: Annotated[str, typer.Option(help="下载模式：journals|keywords|all")] = "all",
     days: Annotated[Optional[int], typer.Option(help="下载最近 N 天")] = None,
     config: Annotated[Optional[Path], typer.Option(help="config.toml 路径")] = None,
 ):
-    """一键执行完整流水线（download→merge→translate→export→ask→sync）。"""
-    from litnexus.core.config import load_config, get_api_key, ConfigError
-    import rich
+    """一键执行完整流水线（download→merge→translate→classify→export）。"""
+    from litnexus.core.config import load_config, ConfigError
 
     skip = set()
     if skip_steps:
@@ -54,18 +52,17 @@ def run(
                 pass
 
     try:
-        cfg = load_config(config)
+        load_config(config)  # 提前验证配置
     except ConfigError as e:
         typer.echo(f"配置错误：{e}", err=True)
         raise typer.Exit(1)
 
     steps = {
-        1: ("download", lambda: cmd_download.download(mode=mode, days=days, config=config)),
-        2: ("merge",    lambda: cmd_merge.merge(input_dir=None, config=config)),
-        3: ("translate",lambda: cmd_translate.translate(batch_size=None, concurrency=None, dry_run=False, config=config)),
-        4: ("export",   lambda: cmd_export.export(filter=None, output=None, config=config)),
-        5: ("ask",      lambda: cmd_ask.ask(input=None, output=None, workers=None, config=config)),
-        6: ("sync",     lambda: cmd_sync.sync(input=None, config=config)),
+        1: ("download",  lambda: cmd_download.download(mode=mode, days=days, config=config)),
+        2: ("merge",     lambda: cmd_merge.merge(input_dir=None, config=config)),
+        3: ("translate", lambda: cmd_translate.translate(batch_size=None, concurrency=None, dry_run=False, config=config)),
+        4: ("classify",  lambda: cmd_ask.ask(workers=None, config=config)),
+        5: ("export",    lambda: cmd_export.export(filter=None, output=None, config=config)),
     }
 
     for step_num in range(from_step, to_step + 1):
@@ -73,11 +70,11 @@ def run(
             typer.echo(f"[跳过] 步骤 {step_num}: {steps[step_num][0]}")
             continue
         typer.echo(f"\n{'='*50}")
-        typer.echo(f"步骤 {step_num}/6: {steps[step_num][0]}")
+        typer.echo(f"步骤 {step_num}/5: {steps[step_num][0]}")
         typer.echo("=" * 50)
         steps[step_num][1]()
 
-    typer.echo("\n✓ 流水线执行完毕。")
+    typer.echo("\n流水线执行完毕。")
 
 
 @app.command("init-config")

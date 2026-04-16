@@ -28,6 +28,7 @@ def parse_article(raw: dict) -> dict:
     epmc_id = raw.get("id")
     pmid = raw.get("pmid") or None
     doi = raw.get("doi") or None
+    pmcid = raw.get("pmcid") or None
 
     pub_year_str = raw.get("pubYear", "")
     pub_year = int(pub_year_str) if pub_year_str and pub_year_str.isdigit() else None
@@ -45,6 +46,7 @@ def parse_article(raw: dict) -> dict:
         "pmid": pmid,
         "doi": doi,
         "source": raw.get("source"),
+        "pmcid": pmcid,
         "title": raw.get("title"),
         "abstract": raw.get("abstractText"),
         "pub_year": pub_year,
@@ -52,10 +54,7 @@ def parse_article(raw: dict) -> dict:
         "journal_title": journal_title,
         "first_publication_date": raw.get("firstPublicationDate"),
         "query_search_term": query_term,
-        "author_list_json": json.dumps(raw["authorList"]) if raw.get("authorList") else None,
         "journal_info_json": json.dumps(journal_info) if journal_info else None,
-        "full_text_url_list_json": json.dumps(raw["fullTextUrlList"]) if raw.get("fullTextUrlList") else None,
-        "mesh_heading_list_json": json.dumps(raw["meshHeadingList"]) if raw.get("meshHeadingList") else None,
         "keyword_list_json": json.dumps(raw["keywordList"]) if raw.get("keywordList") else None,
     }
 

@@ -19,15 +19,20 @@ def stats(
         typer.echo(f"数据库不存在：{cfg.paths.db}", err=True)
         raise typer.Exit(1)
 
-    conn = db_mod.get_connection(cfg.paths.db)
+    conn = db_mod.get_connection(cfg.paths.db, cfg)
     try:
-        s = db_mod.get_stats(conn)
+        s = db_mod.get_stats(conn, cfg.classify.questions)
         typer.echo(f"数据库：{cfg.paths.db}")
-        typer.echo(f"  总文章数：          {s['total']}")
-        typer.echo(f"  待翻译（无 title_zh）：{s['pending_translation']}")
-        typer.echo(f"  待分类（无 q1_ans）：  {s['pending_classification']}")
-        typer.echo(f"  已标记 include=yes：  {s['reviewed_yes']}")
-        typer.echo(f"  已标记 include=no：   {s['reviewed_no']}")
+        typer.echo(f"  总文章数：              {s['total']}")
+        typer.echo(f"  待翻译（无 title_zh）：  {s['pending_translation']}")
+        for q in cfg.classify.questions:
+            key = f"pending_{q.id}"
+            if key in s:
+                typer.echo(f"  待分类（{q.id}_ans 为空）：{s[key]}")
+        if "reviewed_yes" in s:
+            typer.echo(f"  已标记 include=yes：    {s['reviewed_yes']}")
+        if "reviewed_no" in s:
+            typer.echo(f"  已标记 include=no：     {s['reviewed_no']}")
     finally:
         conn.close()
 
@@ -42,10 +47,9 @@ def migrate(
         typer.echo(f"配置错误：{e}", err=True)
         raise typer.Exit(1)
 
-    conn = db_mod.get_connection(cfg.paths.db)
+    conn = db_mod.get_connection(cfg.paths.db, cfg)
     try:
-        db_mod.run_migrations(conn, cfg.paths.db)
-        typer.echo("迁移完成。")
+        typer.echo("迁移完成（动态列已确认存在）。")
     finally:
         conn.close()
 
