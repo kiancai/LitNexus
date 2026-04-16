@@ -1,2 +1,0 @@
-(microbiome OR microbiota OR "microbial community" OR metagenome OR metagenomics) AND ("large language model" OR "foundation model")
-("large language model" OR "foundation model" OR "protein language model" OR "DNA language model" OR "genome model")  AND  (biology OR biological OR "life science" OR "life sciences" OR biomedical OR biomedicine OR  bioinformatics OR "computational biology" OR  genomics OR genetics OR genome OR proteomics OR protein OR "molecular biology" OR 'omics)

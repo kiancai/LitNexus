@@ -1,3 +1,0 @@
-(microbiome OR microbiota OR "microbial community" OR metagenome OR metagenomics OR "16S rRNA") AND ("large language model" OR "foundation model" OR "transformer" OR "BERT" OR "GPT" OR "generative model" OR "representation learning" OR "sequence embedding" OR "deep learning")
-("foundation model" OR "language model" OR "generative AI" OR "pre-trained model" OR "diffusion model" OR "masked language modeling" OR "autoregressive") AND (genomic OR genetics OR DNA OR RNA OR protein OR "amino acid" OR sequence OR "molecular biology" OR transcriptomics)
-("single-cell" OR "scRNA-seq" OR "spatial transcriptomics" OR "multi-omics" OR "spatial omics") AND ("foundation model" OR "embedding" OR "cell atlas" OR "transformer" OR "transfer learning" OR "zero-shot" OR "few-shot")

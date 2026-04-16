@@ -1,0 +1,18 @@
+# 数据目录
+archive/
+database/
+download/
+
+# 包构建产物
+dist/
+build/
+*.egg-info/
+__pycache__/
+*.pyc
+.ruff_cache/
+
+# 系统文件
+.DS_Store
+
+# 文档（本地生成）
+CLAUDE.md

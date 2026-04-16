@@ -1,0 +1,42 @@
+# LitNexus 配置文件示例
+# 复制到 ~/.config/litnexus/config.toml 并按需修改
+# 或运行：litnexus init-config
+
+[paths]
+db = "~/.local/share/litnexus/epmc_articles.db"
+download_dir = "~/.local/share/litnexus/download"
+export_dir = "~/.local/share/litnexus/export"
+journals_file = "~/.config/litnexus/journals.txt"
+keywords_files = [
+    "~/.config/litnexus/keywords_1.txt",
+]
+
+[download]
+days = 30
+page_size = 1000
+request_delay = 0.5
+
+[ai]
+# 留空则依赖 LITNEXUS_API_KEY 或 ARK_API_KEY 环境变量
+api_key = ""
+base_url = "https://ark.cn-beijing.volces.com/api/v3"
+model = "doubao-1-5-pro-32k-character-250715"
+
+[translate]
+batch_size = 30
+concurrency = 20
+
+[classify]
+max_workers = 100
+question_1 = "请判断本文是否属于'计算生物学、生物信息学、生物医学'或相关交叉领域。若文章属于以下任一类型，请回答'是'：(1) 涉及组学数据（基因/蛋白/代谢等）的分析或实验研究；(2) 涉及生物算法、模型、软件工具或数据库的开发与应用；(3) 对上述相关领域的综述、系统评价、进展总结或观点展望。仅当文章是纯粹的临床护理个案、社会学调查、或完全不涉及生物医学背景的纯数学/计算机理论时，才回答'否'。"
+question_2 = "请判断本文是否属于以下任一核心关注领域（命中任意一项即回答'是'）：(a) 微生物组学（Microbiome）；(b) 生物基础模型与生成式AI；(c) 生物医学机器学习应用；(d) 病毒与病原体计算；(e) 生物信息核心工具。若均不属于，回答'否'。"
+
+[export]
+filter = "pending"
+exclude_columns = [
+    "author_list_json",
+    "journal_info_json",
+    "full_text_url_list_json",
+    "mesh_heading_list_json",
+    "keyword_list_json",
+]
