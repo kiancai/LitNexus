@@ -18,7 +18,6 @@ from litnexus.core import db as db_mod
 from litnexus.core.config import TranslateConfig, AIConfig
 
 logger = logging.getLogger(__name__)
-logging.getLogger("httpx").setLevel(logging.WARNING)
 
 _SYSTEM_PROMPT = (
     "You are a professional academic translator. "

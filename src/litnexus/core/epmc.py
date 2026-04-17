@@ -4,15 +4,34 @@ from __future__ import annotations
 
 import datetime
 import json
+import logging
 import time
 from pathlib import Path
 from typing import IO
 
 import requests
+from requests.adapters import HTTPAdapter
+from tqdm import tqdm
+from urllib3.util.retry import Retry
 
 from litnexus.core.config import Config, DownloadConfig
 
+logger = logging.getLogger(__name__)
+
 EPMC_API_URL = "https://www.ebi.ac.uk/europepmc/webservices/rest/search"
+
+
+def _make_session() -> requests.Session:
+    """创建带指数退避重试的 HTTP Session。"""
+    session = requests.Session()
+    retry = Retry(
+        total=3,
+        backoff_factor=1.0,
+        status_forcelist=[429, 500, 502, 503, 504],
+        allowed_methods=["GET"],
+    )
+    session.mount("https://", HTTPAdapter(max_retries=retry))
+    return session
 
 
 def build_date_query(days: int) -> str:
@@ -39,11 +58,16 @@ def fetch_articles(
     query_label: str,
     cfg: DownloadConfig,
     out_file: IO[str],
+    session: requests.Session | None = None,
 ) -> int:
     """对单个 query 执行分页抓取，结果写入 out_file（JSONL），返回下载总数。"""
+    if session is None:
+        session = _make_session()
+
     cursor_mark = "*"
     page = 1
     total = 0
+    pbar: tqdm | None = None
 
     while True:
         params = {
@@ -55,28 +79,37 @@ def fetch_articles(
             "sort_date": "y",
         }
         try:
-            resp = requests.get(EPMC_API_URL, params=params, timeout=30)
+            resp = session.get(EPMC_API_URL, params=params, timeout=30)
             resp.raise_for_status()
             data = resp.json()
         except requests.RequestException as e:
-            print(f"  API 请求失败：{e}")
+            logger.error(f"API 请求失败（第 {page} 页）：{e}")
             break
 
         results = data.get("resultList", {}).get("result", [])
         if not results:
             if page == 1:
-                print("  找到 0 篇文章。")
+                logger.info("  找到 0 篇文章。")
             break
 
         if page == 1:
-            print(f"  找到 {data.get('hitCount', 0)} 篇文章。")
-        print(f"  写入第 {page} 页（{len(results)} 篇）...")
+            hit_count = data.get("hitCount", 0)
+            logger.info(f"  找到 {hit_count} 篇文章。")
+            pbar = tqdm(
+                total=hit_count,
+                desc=f"  {query_label[:30]}",
+                unit="篇",
+                leave=False,
+            )
 
         for article in results:
             article["query_search_term"] = query_label
             out_file.write(json.dumps(article, ensure_ascii=False) + "\n")
 
+        if pbar is not None:
+            pbar.update(len(results))
         total += len(results)
+
         next_cursor = data.get("nextCursorMark")
         if not next_cursor or next_cursor == cursor_mark:
             break
@@ -84,6 +117,8 @@ def fetch_articles(
         page += 1
         time.sleep(cfg.request_delay)
 
+    if pbar is not None:
+        pbar.close()
     return total
 
 
@@ -101,6 +136,7 @@ def run_download(
     date_query = build_date_query(days)
     output_dir.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    session = _make_session()
     generated: list[Path] = []
 
     if mode in ("journals", "all"):
@@ -110,21 +146,21 @@ def run_download(
             total = 0
             with open(out_path, "w", encoding="utf-8") as f:
                 for journal in journals:
-                    print(f"\n--- 抓取期刊：{journal} ---")
+                    logger.info(f"\n--- 抓取期刊：{journal} ---")
                     query = f'JOURNAL:"{journal}" AND {date_query}'
-                    n = fetch_articles(query, journal, cfg.download, f)
-                    print(f"  完成，下载 {n} 篇")
+                    n = fetch_articles(query, journal, cfg.download, f, session)
+                    logger.info(f"  完成，下载 {n} 篇")
                     total += n
-            print(f"\n期刊下载完成，共 {total} 篇 → {out_path}")
+            logger.info(f"\n期刊下载完成，共 {total} 篇 → {out_path}")
             generated.append(out_path)
         else:
-            print(f"期刊列表为空或文件不存在：{cfg.paths.journals_file}")
+            logger.warning(f"期刊列表为空或文件不存在：{cfg.paths.journals_file}")
 
     if mode in ("keywords", "all"):
         for kw_file in cfg.paths.keywords_files:
             terms = load_query_file(kw_file)
             if not terms:
-                print(f"关键词文件为空或不存在：{kw_file}")
+                logger.warning(f"关键词文件为空或不存在：{kw_file}")
                 continue
             stem = kw_file.stem
             out_path = output_dir / f"epmc_{stem}_{timestamp}.jsonl"
@@ -132,12 +168,12 @@ def run_download(
             with open(out_path, "w", encoding="utf-8") as f:
                 for term in terms:
                     label = term[:60] + ("..." if len(term) > 60 else "")
-                    print(f"\n--- 抓取检索式：{label} ---")
+                    logger.info(f"\n--- 抓取检索式：{label} ---")
                     query = f"({term}) AND {date_query}"
-                    n = fetch_articles(query, term, cfg.download, f)
-                    print(f"  完成，下载 {n} 篇")
+                    n = fetch_articles(query, term, cfg.download, f, session)
+                    logger.info(f"  完成，下载 {n} 篇")
                     total += n
-            print(f"\n关键词下载完成（{kw_file.name}），共 {total} 篇 → {out_path}")
+            logger.info(f"\n关键词下载完成（{kw_file.name}），共 {total} 篇 → {out_path}")
             generated.append(out_path)
 
     return generated

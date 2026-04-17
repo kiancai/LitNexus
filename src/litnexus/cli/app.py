@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Annotated, Optional
 
@@ -31,6 +32,24 @@ db_app.command("backup")(cmd_db.backup)
 app.add_typer(db_app, name="db")
 
 
+def setup_logging(verbose: bool = False) -> None:
+    """初始化日志配置，统一控制所有模块的输出级别和格式。"""
+    level = logging.DEBUG if verbose else logging.INFO
+    logging.basicConfig(level=level, format="%(message)s")
+    # 抑制第三方库的噪声日志
+    for noisy in ("httpx", "openai", "urllib3", "requests"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
+
+
+@app.callback()
+def callback(
+    verbose: Annotated[
+        bool, typer.Option("--verbose", "-v", help="显示调试日志")
+    ] = False,
+) -> None:
+    setup_logging(verbose)
+
+
 @app.command("run")
 def run(
     from_step: Annotated[int, typer.Option(min=1, max=5, help="从第几步开始（1-5）")] = 1,
@@ -41,7 +60,7 @@ def run(
     config: Annotated[Optional[Path], typer.Option(help="config.toml 路径")] = None,
 ):
     """一键执行完整流水线（download→merge→translate→classify→export）。"""
-    from litnexus.core.config import load_config, ConfigError
+    from litnexus.core.config import load_config, get_api_key, ConfigError
 
     skip = set()
     if skip_steps:
@@ -52,9 +71,26 @@ def run(
                 pass
 
     try:
-        load_config(config)  # 提前验证配置
+        cfg = load_config(config)
     except ConfigError as e:
         typer.echo(f"配置错误：{e}", err=True)
+        raise typer.Exit(1)
+
+    active_steps = set(range(from_step, to_step + 1)) - skip
+
+    # ── 前置预检：避免前几步执行完才发现后续缺配置 ──────────────────────────
+    needs_api = {3, 4} & active_steps
+    if needs_api:
+        try:
+            get_api_key(cfg)
+        except ConfigError as e:
+            step_names = {3: "translate", 4: "classify"}
+            names = "/".join(step_names[s] for s in sorted(needs_api))
+            typer.echo(f"步骤 {names} 需要 API Key，但：{e}", err=True)
+            raise typer.Exit(1)
+
+    if 4 in active_steps and not cfg.classify.questions:
+        typer.echo("步骤 classify 需要配置问题，但 classify.questions 为空", err=True)
         raise typer.Exit(1)
 
     steps = {

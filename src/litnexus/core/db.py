@@ -9,11 +9,14 @@ Schema 版本历史：
 
 from __future__ import annotations
 
+import logging
 import shutil
 import sqlite3
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Iterator
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -145,6 +148,7 @@ def _run_migrations(conn: sqlite3.Connection, db_path: Path) -> None:
         conn.executescript(_CREATE_TABLE + _CREATE_INDEXES)
         _set_version(conn, SCHEMA_VERSION)
         conn.commit()
+        logger.info("已创建新数据库（schema v2）。")
         return
 
     # v0 或 v1 → v2
@@ -161,10 +165,10 @@ def _migrate_any_to_v2(conn: sqlite3.Connection, db_path: Path) -> None:
     - 动态列（q1_ans/q1_rea/q2_ans/q2_rea/include/tags 等）数据保留
     """
     version = _get_version(conn)
-    print(f"检测到 v{version} 数据库，正在迁移到 v2...")
+    logger.info(f"检测到 v{version} 数据库，正在迁移到 v2...")
     bak = db_path.with_suffix(".db.bak")
     shutil.copy2(db_path, bak)
-    print(f"  已备份到：{bak}")
+    logger.info(f"  已备份到：{bak}")
 
     old_cols = {row[1] for row in conn.execute("PRAGMA table_info(articles)")}
 
@@ -238,11 +242,10 @@ def _migrate_any_to_v2(conn: sqlite3.Connection, db_path: Path) -> None:
             conn.executescript(_CREATE_INDEXES)
             _set_version(conn, 2)
 
-        print(f"  迁移完成（v{version} → v2）。")
-        print("  已删除 author_list_json / mesh_heading_list_json / full_text_url_list_json。")
-        print("  建议之后运行 python tools/migrate_personal_db.py 执行 VACUUM 压缩空间。")
+        logger.info(f"  迁移完成（v{version} → v2）。")
+        logger.info("  已删除 author_list_json / mesh_heading_list_json / full_text_url_list_json。")
     except Exception as e:
-        print(f"  迁移失败：{e}", file=sys.stderr)
+        logger.error(f"  迁移失败：{e}")
         raise
 
 

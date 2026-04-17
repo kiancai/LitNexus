@@ -2,7 +2,7 @@
 
 设计原则：
 - 每篇文章一次 API 调用，同时回答所有配置的问题
-- 每篇处理完立即写入 DB（各线程独立连接，SQLite WAL 自动串行化写入）
+- 分类结果缓冲至 BUFFER_SIZE 条后批量写入 DB，兼顾性能与中断可恢复性
 - 已有答案的列用 COALESCE 保护，不覆盖
 """
 
@@ -21,6 +21,8 @@ from tqdm import tqdm
 from litnexus.core.config import ClassifyConfig, AIConfig, Question
 
 logger = logging.getLogger(__name__)
+
+_BUFFER_SIZE = 50  # 每积累多少条结果批量写入一次 DB
 
 
 def _build_system_prompt(questions: list[Question]) -> str:
@@ -96,21 +98,17 @@ def _call_ai(
     return _parse_response(resp.choices[0].message.content, questions)
 
 
-def _process_row(args: tuple) -> tuple[str, bool]:
-    """线程池工作函数：处理一篇文章，结果立即写入 DB。
+def _process_row(args: tuple) -> tuple[str, dict[str, tuple[str, str]]]:
+    """线程池工作函数：处理一篇文章，返回 (epmc_id, results)。
 
-    返回 (epmc_id, success)。
+    results 为 {question_id: (answer, reason)}，错误情况下包含 "API错误" 标记。
     """
-    epmc_id, title, abstract, api_key, base_url, model, questions, db_path = args
+    epmc_id, title, abstract, api_key, base_url, model, questions = args
 
     title = title or ""
     abstract = abstract or ""
     if not title.strip() and not abstract.strip():
-        _write_results(
-            db_path, epmc_id,
-            {q.id: ("N/A", "缺少标题和摘要") for q in questions}
-        )
-        return epmc_id, True
+        return epmc_id, {q.id: ("N/A", "缺少标题和摘要") for q in questions}
 
     client = OpenAI(api_key=api_key, base_url=base_url)
     try:
@@ -121,32 +119,30 @@ def _process_row(args: tuple) -> tuple[str, bool]:
         logger.error(f"分类失败 ({epmc_id}): {e}")
         results = {q.id: ("API错误", str(e)[:200]) for q in questions}
 
-    _write_results(db_path, epmc_id, results)
-    return epmc_id, True
+    return epmc_id, results
 
 
-def _write_results(
+def _write_batch(
     db_path: Path,
-    epmc_id: str,
-    results: dict[str, tuple[str, str]],
+    batch: list[tuple[str, dict[str, tuple[str, str]]]],
 ) -> None:
-    """将分类结果写入 DB（COALESCE 保护已有值）。每线程独立连接。"""
-    if not results:
-        return
-    set_parts = []
-    params = []
-    for q_id, (ans, rea) in results.items():
-        set_parts.append(f"{q_id}_ans = COALESCE(?, {q_id}_ans)")
-        set_parts.append(f"{q_id}_rea = COALESCE(?, {q_id}_rea)")
-        params.extend([ans, rea])
-    params.append(epmc_id)
-
+    """批量将分类结果写入 DB（COALESCE 保护已有值）。"""
     conn = sqlite3.connect(db_path)
     try:
-        conn.execute(
-            f"UPDATE articles SET {', '.join(set_parts)} WHERE epmc_id = ?",
-            params,
-        )
+        for epmc_id, results in batch:
+            if not results:
+                continue
+            set_parts = []
+            params = []
+            for q_id, (ans, rea) in results.items():
+                set_parts.append(f"{q_id}_ans = COALESCE(?, {q_id}_ans)")
+                set_parts.append(f"{q_id}_rea = COALESCE(?, {q_id}_rea)")
+                params.extend([ans, rea])
+            params.append(epmc_id)
+            conn.execute(
+                f"UPDATE articles SET {', '.join(set_parts)} WHERE epmc_id = ?",
+                params,
+            )
         conn.commit()
     finally:
         conn.close()
@@ -191,12 +187,13 @@ def run_classification(
             cfg_ai.base_url,
             cfg_ai.model,
             questions,
-            db_path,
         )
         for row in pending
     ]
 
     processed = failed = 0
+    buffer: list[tuple[str, dict[str, tuple[str, str]]]] = []
+
     with concurrent.futures.ThreadPoolExecutor(max_workers=cfg.max_workers) as executor:
         futures = {executor.submit(_process_row, t): t for t in tasks}
         for future in tqdm(
@@ -205,13 +202,17 @@ def run_classification(
             desc="分类进度",
         ):
             try:
-                _, success = future.result()
-                if success:
-                    processed += 1
-                else:
-                    failed += 1
+                epmc_id, results = future.result()
+                buffer.append((epmc_id, results))
+                processed += 1
+                if len(buffer) >= _BUFFER_SIZE:
+                    _write_batch(db_path, buffer)
+                    buffer.clear()
             except Exception as e:
                 logger.error(f"任务异常：{e}")
                 failed += 1
+
+    if buffer:
+        _write_batch(db_path, buffer)
 
     return processed, failed
