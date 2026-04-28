@@ -11,6 +11,7 @@ def export(
     filter: Annotated[Optional[str], typer.Option(help="pending | all | 自定义 SQL WHERE")] = None,
     output: Annotated[Optional[Path], typer.Option(help="输出 CSV 路径")] = None,
     config: Annotated[Optional[Path], typer.Option(help="config.toml 路径")] = None,
+    yes: Annotated[bool, typer.Option("--yes", "-y", help="跳过确认")] = False,
 ):
     """从数据库导出文章到 CSV 文件。"""
     try:
@@ -22,6 +23,11 @@ def export(
     filter_mode = filter or cfg.export.filter
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     out_path = output or (cfg.paths.export_dir / f"articles_{timestamp}.csv")
+
+    typer.echo(f"筛选条件：{filter_mode}")
+    typer.echo(f"输出路径：{out_path}")
+    if not yes:
+        typer.confirm("确认导出？", abort=True)
 
     conn = db_mod.get_connection(cfg.paths.db)
     try:

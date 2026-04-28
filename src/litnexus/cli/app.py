@@ -58,6 +58,7 @@ def run(
     mode: Annotated[str, typer.Option(help="下载模式：journals|keywords|all")] = "all",
     days: Annotated[Optional[int], typer.Option(help="下载最近 N 天")] = None,
     config: Annotated[Optional[Path], typer.Option(help="config.toml 路径")] = None,
+    yes: Annotated[bool, typer.Option("--yes", "-y", help="跳过所有确认")] = False,
 ):
     """一键执行完整流水线（download→merge→translate→classify→export）。"""
     from litnexus.core.config import load_config, get_api_key, ConfigError
@@ -78,6 +79,14 @@ def run(
 
     active_steps = set(range(from_step, to_step + 1)) - skip
 
+    # ── 显示流水线总览 ─────────────────────────────────────────────────────
+    step_names = {1: "download", 2: "merge", 3: "translate", 4: "classify", 5: "export"}
+    typer.echo("即将执行以下步骤：")
+    for s in sorted(active_steps):
+        typer.echo(f"  步骤 {s}: {step_names[s]}")
+    if not yes:
+        typer.confirm("确认执行？", abort=True)
+
     # ── 前置预检：避免前几步执行完才发现后续缺配置 ──────────────────────────
     needs_api = {3, 4} & active_steps
     if needs_api:
@@ -94,11 +103,11 @@ def run(
         raise typer.Exit(1)
 
     steps = {
-        1: ("download",  lambda: cmd_download.download(mode=mode, days=days, config=config)),
-        2: ("merge",     lambda: cmd_merge.merge(input_dir=None, config=config)),
-        3: ("translate", lambda: cmd_translate.translate(batch_size=None, concurrency=None, dry_run=False, config=config)),
-        4: ("classify",  lambda: cmd_ask.ask(workers=None, config=config)),
-        5: ("export",    lambda: cmd_export.export(filter=None, output=None, config=config)),
+        1: ("download",  lambda: cmd_download.download(mode=mode, days=days, config=config, yes=True)),
+        2: ("merge",     lambda: cmd_merge.merge(input_dir=None, config=config, yes=True)),
+        3: ("translate", lambda: cmd_translate.translate(batch_size=None, concurrency=None, dry_run=False, config=config, yes=True)),
+        4: ("classify",  lambda: cmd_ask.ask(workers=None, config=config, yes=True)),
+        5: ("export",    lambda: cmd_export.export(filter=None, output=None, config=config, yes=True)),
     }
 
     for step_num in range(from_step, to_step + 1):

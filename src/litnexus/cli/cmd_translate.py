@@ -12,6 +12,7 @@ def translate(
     concurrency: Annotated[Optional[int], typer.Option(help="覆盖并发数")] = None,
     dry_run: Annotated[bool, typer.Option("--dry-run", help="只显示待翻译数量，不调用 API")] = False,
     config: Annotated[Optional[Path], typer.Option(help="config.toml 路径")] = None,
+    yes: Annotated[bool, typer.Option("--yes", "-y", help="跳过确认")] = False,
 ):
     """批量翻译数据库中尚未翻译的文章标题。"""
     try:
@@ -30,9 +31,11 @@ def translate(
     conn = db_mod.get_connection(cfg.paths.db)
     try:
         pending = db_mod.fetch_pending_translations(conn)
-        typer.echo(f"待翻译：{len(pending)} 篇")
+        typer.echo(f"待翻译：{len(pending)} 篇（批量大小 {cfg.translate.batch_size}）")
         if dry_run or not pending:
             return
+        if not yes:
+            typer.confirm("确认开始翻译？", abort=True)
         translated, failed = asyncio.run(
             trans_mod.run_translation(conn, cfg.translate, cfg.ai)
         )

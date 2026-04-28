@@ -9,6 +9,7 @@ from litnexus.core.io import iter_jsonl, parse_article
 def merge(
     input_dir: Annotated[Optional[Path], typer.Option(help="JSONL 目录（默认读 config paths.download_dir）")] = None,
     config: Annotated[Optional[Path], typer.Option(help="config.toml 路径")] = None,
+    yes: Annotated[bool, typer.Option("--yes", "-y", help="跳过确认")] = False,
 ):
     """将 download/ 目录下的 JSONL 文件合并入 SQLite 数据库。"""
     try:
@@ -26,6 +27,13 @@ def merge(
     if not jsonl_files:
         typer.echo(f"未找到 .jsonl 文件：{src_dir}")
         return
+
+    typer.echo(f"找到 {len(jsonl_files)} 个 JSONL 文件：")
+    for f in jsonl_files:
+        typer.echo(f"  - {f.name}")
+    typer.echo(f"目标数据库：{cfg.paths.db}")
+    if not yes:
+        typer.confirm("确认合并到数据库？", abort=True)
 
     conn = db_mod.get_connection(cfg.paths.db)
     total_inserted = total_skipped = total_errors = 0

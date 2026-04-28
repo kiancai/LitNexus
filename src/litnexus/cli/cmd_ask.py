@@ -9,6 +9,7 @@ from litnexus.core import classifier as cls_mod
 def ask(
     workers: Annotated[Optional[int], typer.Option(help="覆盖并发线程数")] = None,
     config: Annotated[Optional[Path], typer.Option(help="config.toml 路径")] = None,
+    yes: Annotated[bool, typer.Option("--yes", "-y", help="跳过确认")] = False,
 ):
     """用 AI 对数据库中未分类的文章做多问题分类（直接读写 DB）。"""
     try:
@@ -22,16 +23,24 @@ def ask(
     if workers:
         cfg.classify.max_workers = workers
 
-    # 确保动态列存在
-    conn = db_mod.get_connection(cfg.paths.db, cfg)
-    conn.close()
-
     if not cfg.classify.questions:
         typer.echo("配置中未定义任何问题（classify.questions 为空）", err=True)
         raise typer.Exit(1)
 
+    # 确保动态列存在，并查询待分类数量
+    conn = db_mod.get_connection(cfg.paths.db, cfg)
+    try:
+        pending = db_mod.fetch_pending_classification(conn, cfg.classify.questions)
+    finally:
+        conn.close()
+
     q_ids = ", ".join(q.id for q in cfg.classify.questions)
     typer.echo(f"问题列表：{q_ids}")
+    typer.echo(f"待分类：{len(pending)} 篇（并发 {cfg.classify.max_workers}）")
+    if not pending:
+        return
+    if not yes:
+        typer.confirm("确认开始分类？", abort=True)
 
     processed, failed = cls_mod.run_classification(cfg.paths.db, cfg.classify, cfg.ai)
     typer.echo(f"\n分类完成：处理 {processed}，失败 {failed}")
