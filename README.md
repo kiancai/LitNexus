@@ -43,9 +43,12 @@ uv run litnexus run
 ### 图形界面
 
 ```bash
+uv run litnexus                # 不带子命令时默认打开图形界面
 uv run litnexus gui            # 浏览器打开配置面板（配置 + 跑流水线 + 导入/导出 CSV）
 uv run litnexus gui --native   # 原生桌面窗口（需 `uv sync --extra desktop` 安装 pywebview）
 ```
+
+从 [GitHub Release](../../releases) 下载的桌面版（macOS `.app` / Windows `.exe`）双击即进图形界面，无需安装 Python。首次打开时 macOS 需右键 →「打开」绕过未签名提示，Windows 在 SmartScreen 提示中点「仍要运行」。
 
 ### CLI 命令
 

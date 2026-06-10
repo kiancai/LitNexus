@@ -392,10 +392,13 @@ uv run litnexus import ~/Desktop/results.csv
 不想用命令行的话，可以用图形面板完成几乎所有操作：
 
 ```bash
+uv run litnexus                  # 不带子命令时默认打开图形界面
 uv run litnexus gui              # 在浏览器打开（默认 http://localhost:8080）
 uv run litnexus gui --port 9000  # 换端口
 uv run litnexus gui --native     # 原生桌面窗口（需 `uv sync --extra desktop` 装 pywebview）
 ```
+
+也可以直接从 GitHub Release 下载桌面版（macOS `.app` / Windows `.exe`），双击即进图形界面，无需安装 Python 或 uv。
 
 界面自上而下分三段：
 

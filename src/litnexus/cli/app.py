@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import multiprocessing
 import sys
 from pathlib import Path
 from typing import Annotated
@@ -75,7 +76,14 @@ def callback(
     ui.configure_ui(plain=plain, no_color=no_color)
     setup_logging(verbose)
     if ctx.invoked_subcommand is None:
-        typer.echo(ctx.get_help())
+        # 无子命令时默认打开图形界面（双击二进制即进 GUI）；命令列表用 --help 查看。
+        # 装了 pywebview（desktop extra / 打包版）则用原生窗口，否则开浏览器。
+        import importlib.util
+
+        from litnexus.gui import launch
+
+        native = importlib.util.find_spec("webview") is not None
+        launch(None, native=native)
         raise typer.Exit()
 
 
@@ -296,6 +304,9 @@ def run(
 
 
 def main():
+    # PyInstaller 冻结环境下，nicegui 原生窗口（pywebview）靠 multiprocessing
+    # 启动窗口进程；缺少 freeze_support() 会导致子进程重新执行主程序、无限自我复制。
+    multiprocessing.freeze_support()
     try:
         app(standalone_mode=False)
         return 0

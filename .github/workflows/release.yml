@@ -14,10 +14,13 @@ jobs:
             artifact: litnexus-linux-x86_64
           - os: macos-13
             artifact: litnexus-macos-x86_64
+            app: LitNexus-macos-x86_64
           - os: macos-latest
             artifact: litnexus-macos-arm64
+            app: LitNexus-macos-arm64
           - os: windows-latest
             artifact: litnexus-windows-x86_64.exe
+            app: LitNexus-windows-x86_64
 
     runs-on: ${{ matrix.os }}
 
@@ -29,22 +32,46 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependencies
-        run: uv sync --extra dev
+        run: uv sync --extra dev --extra desktop
 
-      - name: Build binary
+      # 控制台版：终端用户的 CLI 入口（无参数运行时也会以浏览器模式打开 GUI）
+      - name: Build CLI binary (console)
+        shell: bash
         run: |
           uv run pyinstaller \
             --onefile \
             --name ${{ matrix.artifact }} \
             --collect-all litnexus \
+            --collect-all nicegui \
             --hidden-import pydantic_core \
             src/litnexus/cli/app.py
+
+      # 窗口版：双击即用的桌面应用（pywebview 原生窗口，无终端窗口）。
+      # macOS 用 --onedir 产出 .app（启动快），Windows 用 --onefile 产出单 exe。
+      - name: Build GUI app (windowed)
+        if: matrix.app != ''
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "macOS" ]; then MODE=--onedir; else MODE=--onefile; fi
+          uv run pyinstaller \
+            $MODE \
+            --windowed \
+            --name ${{ matrix.app }} \
+            --collect-all litnexus \
+            --collect-all nicegui \
+            --collect-all webview \
+            --hidden-import pydantic_core \
+            src/litnexus/cli/app.py
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            ditto -c -k --keepParent "dist/${{ matrix.app }}.app" "dist/${{ matrix.app }}.app.zip"
+            rm -rf "dist/${{ matrix.app }}.app" "dist/${{ matrix.app }}"
+          fi
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
-          path: dist/${{ matrix.artifact }}*
+          path: dist/*
 
   create-release:
     needs: build-binaries
