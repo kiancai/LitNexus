@@ -19,7 +19,7 @@ jobs:
             artifact: litnexus-macos-arm64
             app: LitNexus-macos-arm64
           - os: windows-latest
-            artifact: litnexus-windows-x86_64.exe
+            artifact: litnexus-windows-x86_64
             app: LitNexus-windows-x86_64
 
     runs-on: ${{ matrix.os }}
@@ -34,27 +34,36 @@ jobs:
       - name: Install dependencies
         run: uv sync --extra dev --extra desktop
 
+      # 统一用 --onedir：onefile 每次启动都要解压并触发系统安全扫描
+      # （实测每条命令 15-20 秒），onedir 仅首跑扫描一次、之后亚秒级启动。
+
       # 控制台版：终端用户的 CLI 入口（无参数运行时也会以浏览器模式打开 GUI）
       - name: Build CLI binary (console)
         shell: bash
         run: |
           uv run pyinstaller \
-            --onefile \
+            --onedir \
             --name ${{ matrix.artifact }} \
             --collect-all litnexus \
             --collect-all nicegui \
             --hidden-import pydantic_core \
             src/litnexus/cli/app.py
+          cd dist
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            7z a "${{ matrix.artifact }}.zip" "${{ matrix.artifact }}/"
+          else
+            tar -czf "${{ matrix.artifact }}.tar.gz" "${{ matrix.artifact }}"
+          fi
+          rm -rf "${{ matrix.artifact }}"
 
       # 窗口版：双击即用的桌面应用（pywebview 原生窗口，无终端窗口）。
-      # macOS 用 --onedir 产出 .app（启动快），Windows 用 --onefile 产出单 exe。
+      # macOS 产出 .app，Windows 产出含 exe 的文件夹（zip 分发）。
       - name: Build GUI app (windowed)
         if: matrix.app != ''
         shell: bash
         run: |
-          if [ "$RUNNER_OS" = "macOS" ]; then MODE=--onedir; else MODE=--onefile; fi
           uv run pyinstaller \
-            $MODE \
+            --onedir \
             --windowed \
             --name ${{ matrix.app }} \
             --collect-all litnexus \
@@ -62,9 +71,13 @@ jobs:
             --collect-all webview \
             --hidden-import pydantic_core \
             src/litnexus/cli/app.py
+          cd dist
           if [ "$RUNNER_OS" = "macOS" ]; then
-            ditto -c -k --keepParent "dist/${{ matrix.app }}.app" "dist/${{ matrix.app }}.app.zip"
-            rm -rf "dist/${{ matrix.app }}.app" "dist/${{ matrix.app }}"
+            ditto -c -k --keepParent "${{ matrix.app }}.app" "${{ matrix.app }}.app.zip"
+            rm -rf "${{ matrix.app }}.app" "${{ matrix.app }}"
+          else
+            7z a "${{ matrix.app }}.zip" "${{ matrix.app }}/"
+            rm -rf "${{ matrix.app }}"
           fi
 
       - name: Upload artifact
