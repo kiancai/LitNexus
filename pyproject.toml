@@ -11,11 +11,14 @@ requires-python = ">=3.11"
 dependencies = [
     "typer>=0.12",
     "rich>=13",
+    "tomli-w>=1.0",
+    "platformdirs>=4",
     "requests>=2.32",
     "openai>=1.30",
     "tqdm>=4.66",
     "pandas>=2.2",
     "pydantic>=2.7",
+    "nicegui>=2",
 ]
 
 [project.optional-dependencies]
@@ -24,6 +27,10 @@ dev = [
     "pytest-asyncio>=0.23",
     "ruff>=0.4",
     "pyinstaller>=6.6",
+]
+# 原生桌面窗口（litnexus gui --native）。打包二进制时一并包含。
+desktop = [
+    "pywebview>=5",
 ]
 
 [project.scripts]
@@ -38,6 +45,11 @@ line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+# 内置长 prompt 模板 / 中文 UI 标签，豁免行长限制
+"src/litnexus/core/config.py" = ["E501"]
+"src/litnexus/gui/app.py" = ["E501"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

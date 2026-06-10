@@ -12,14 +12,15 @@ from __future__ import annotations
 import logging
 import shutil
 import sqlite3
-import sys
+from collections.abc import Iterator
 from pathlib import Path
-from typing import TYPE_CHECKING, Iterator
+from typing import TYPE_CHECKING
 
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     import pandas as pd
+
     from litnexus.core.config import Config, Question
 
 SCHEMA_VERSION = 2
@@ -65,7 +66,7 @@ CREATE INDEX IF NOT EXISTS idx_journal  ON articles(journal_title);
 
 # ── 连接 ──────────────────────────────────────────────────────────────────────
 
-def get_connection(db_path: Path, cfg: "Config | None" = None) -> sqlite3.Connection:
+def get_connection(db_path: Path, cfg: Config | None = None) -> sqlite3.Connection:
     """打开数据库，自动迁移 schema，启用 WAL 模式。
 
     若传入 cfg，同时调用 ensure_dynamic_columns() 确保问题列和自定义列存在。
@@ -77,22 +78,27 @@ def get_connection(db_path: Path, cfg: "Config | None" = None) -> sqlite3.Connec
     conn.execute("PRAGMA foreign_keys=ON")
     _run_migrations(conn, db_path)
     if cfg is not None:
-        ensure_dynamic_columns(conn, cfg.classify.questions, cfg.schema_cfg.custom_columns)
+        ensure_dynamic_columns(conn, cfg)
     return conn
 
 
-def ensure_dynamic_columns(
-    conn: sqlite3.Connection,
-    questions: "list[Question]",
-    custom_cols: list[str],
-) -> None:
-    """确保所有配置中定义的问题列和自定义列存在于数据库中。
+def ensure_dynamic_columns(conn: sqlite3.Connection, cfg: Config) -> None:
+    """确保配置所需的动态列存在：额外 EPMC 字段、问题列、自定义标注列。
 
-    若列不存在则自动 ALTER TABLE ADD COLUMN（TEXT 类型）。
-    同时为 include 列和问题答案列创建索引（如果存在）。
+    若列不存在则自动 ALTER TABLE ADD COLUMN；并为常用过滤列建索引。
     """
+    from litnexus.core.fields import active_extra_fields
+
+    questions = cfg.classify.questions
+    custom_cols = cfg.schema_cfg.custom_columns
+
     existing = {row[1] for row in conn.execute("PRAGMA table_info(articles)")}
     added = []
+
+    for spec in active_extra_fields(cfg.ingest.extra_fields):
+        if spec.id not in existing:
+            conn.execute(f"ALTER TABLE articles ADD COLUMN {spec.id} {spec.sql_type}")
+            added.append(spec.id)
 
     for q in questions:
         for suffix in ("_ans", "_rea"):
@@ -243,7 +249,7 @@ def _migrate_any_to_v2(conn: sqlite3.Connection, db_path: Path) -> None:
             _set_version(conn, 2)
 
         logger.info(f"  迁移完成（v{version} → v2）。")
-        logger.info("  已删除 author_list_json / mesh_heading_list_json / full_text_url_list_json。")
+        logger.info("  已删除 3 个大型 JSON 列（author_list / mesh_heading / full_text_url）。")
     except Exception as e:
         logger.error(f"  迁移失败：{e}")
         raise
@@ -254,29 +260,35 @@ def run_migrations(conn: sqlite3.Connection, db_path: Path) -> None:
     _run_migrations(conn, db_path)
 
 
+def get_schema_version(conn: sqlite3.Connection) -> int:
+    """返回当前数据库的 schema 版本（PRAGMA user_version）。"""
+    return _get_version(conn)
+
+
+def list_columns(conn: sqlite3.Connection) -> list[str]:
+    """返回 articles 表的全部列名（按表中顺序）。"""
+    return [row[1] for row in conn.execute("PRAGMA table_info(articles)")]
+
+
 # ── 文章插入 ──────────────────────────────────────────────────────────────────
 
-_INSERT_SQL = """
-INSERT OR IGNORE INTO articles (
-    epmc_id, pmid, doi, source, pmcid,
-    title, abstract, pub_year, author_string, journal_title,
-    first_publication_date, query_search_term,
-    journal_info_json, keyword_list_json
-) VALUES (
-    :epmc_id, :pmid, :doi, :source, :pmcid,
-    :title, :abstract, :pub_year, :author_string, :journal_title,
-    :first_publication_date, :query_search_term,
-    :journal_info_json, :keyword_list_json
-)
-"""
-
-
 def insert_articles(conn: sqlite3.Connection, articles: list[dict]) -> tuple[int, int]:
-    """批量插入（INSERT OR IGNORE），返回 (inserted, skipped)。"""
+    """批量插入（INSERT OR IGNORE），返回 (inserted, skipped)。
+
+    动态取「文章键 ∩ 表中实际存在的列」构造 INSERT，因此用户启用的额外
+    EPMC 字段列也会被一并写入；表里没有的键自动忽略。
+    """
+    if not articles:
+        return 0, 0
+    existing = {row[1] for row in conn.execute("PRAGMA table_info(articles)")}
+    cols = [c for c in articles[0] if c in existing]
+    placeholders = ", ".join(["?"] * len(cols))
+    sql = f"INSERT OR IGNORE INTO articles ({', '.join(cols)}) VALUES ({placeholders})"
+
     cursor = conn.cursor()
     inserted = skipped = 0
     for art in articles:
-        cursor.execute(_INSERT_SQL, art)
+        cursor.execute(sql, [art.get(c) for c in cols])
         if cursor.rowcount > 0:
             inserted += 1
         else:
@@ -310,7 +322,7 @@ def update_translations(
 
 def fetch_pending_classification(
     conn: sqlite3.Connection,
-    questions: "list[Question]",
+    questions: list[Question],
 ) -> list[dict]:
     """返回需要分类的文章列表。
 
@@ -326,9 +338,59 @@ def fetch_pending_classification(
     return [dict(r) for r in rows]
 
 
+# ── 复筛回写 ──────────────────────────────────────────────────────────────────
+
+def apply_review(
+    conn: sqlite3.Connection,
+    rows: list[dict],
+    annotation_columns: list[str],
+) -> tuple[int, int]:
+    """把复筛标注写回数据库。
+
+    每个 row 含一个匹配键（epmc_id / pmid / doi 任一）和若干标注列的值。
+    只更新 annotation_columns 中、且该行给出了非空值的列；绝不触碰源字段或 AI 列。
+    值为 None（CSV 中留空）的列会被跳过，因此不会误抹掉已有标注。
+
+    返回 (updated, unmatched)：updated = 命中并写入的行数，
+    unmatched = 有标注要写、却没找到对应文章（或缺匹配键）的行数。
+    """
+    existing = {row[1] for row in conn.execute("PRAGMA table_info(articles)")}
+    cols = [c for c in annotation_columns if c in existing]
+    if not cols:
+        return 0, 0
+
+    updated = unmatched = 0
+    for row in rows:
+        set_items = {c: row[c] for c in cols if row.get(c) is not None}
+        if not set_items:
+            continue  # 这行没有任何要写的标注，视作未改动
+
+        key_col = key_val = None
+        for k in ("epmc_id", "pmid", "doi"):
+            v = row.get(k)
+            if v:
+                key_col, key_val = k, v
+                break
+        if key_col is None:
+            unmatched += 1
+            continue
+
+        set_clause = ", ".join(f"{c} = ?" for c in set_items)
+        params = [*set_items.values(), key_val]
+        cur = conn.execute(
+            f"UPDATE articles SET {set_clause} WHERE {key_col} = ?", params
+        )
+        if cur.rowcount > 0:
+            updated += 1
+        else:
+            unmatched += 1
+    conn.commit()
+    return updated, unmatched
+
+
 # ── 导出 ──────────────────────────────────────────────────────────────────────
 
-def fetch_for_export(conn: sqlite3.Connection, filter_mode: str) -> "pd.DataFrame":
+def fetch_for_export(conn: sqlite3.Connection, filter_mode: str) -> pd.DataFrame:
     """按 filter_mode 导出文章 DataFrame。
 
     filter_mode:
@@ -338,6 +400,12 @@ def fetch_for_export(conn: sqlite3.Connection, filter_mode: str) -> "pd.DataFram
     """
     import pandas as pd  # 懒导入，仅导出时需要
     if filter_mode == "pending":
+        cols = {row[1] for row in conn.execute("PRAGMA table_info(articles)")}
+        if "include" not in cols:
+            raise ValueError(
+                "导出筛选 'pending' 需要 include 列，但当前数据库没有该列。"
+                "请在 [schema].custom_columns 中保留 include，或改用 --where all。"
+            )
         where = "include IS NULL"
     elif filter_mode == "all":
         where = "1=1"
@@ -352,7 +420,7 @@ def fetch_for_export(conn: sqlite3.Connection, filter_mode: str) -> "pd.DataFram
 
 def get_stats(
     conn: sqlite3.Connection,
-    questions: "list[Question] | None" = None,
+    questions: list[Question] | None = None,
 ) -> dict[str, int]:
     """返回数据库统计摘要。questions 不为空时统计各问题的待处理数。"""
     stats: dict[str, int] = {
@@ -371,6 +439,17 @@ def get_stats(
                 stats[f"pending_{q.id}"] = conn.execute(
                     f"SELECT COUNT(*) FROM articles WHERE {col} IS NULL"
                 ).fetchone()[0]
+                stats[f"{q.id}_yes"] = conn.execute(
+                    f"SELECT COUNT(*) FROM articles WHERE {col} = '是'"
+                ).fetchone()[0]
+                stats[f"{q.id}_no"] = conn.execute(
+                    f"SELECT COUNT(*) FROM articles WHERE {col} = '否'"
+                ).fetchone()[0]
+                # 非 是/否/NULL 的答案：N/A（无标题摘要）或旧版本遗留的 "API错误"
+                stats[f"{q.id}_other"] = conn.execute(
+                    f"SELECT COUNT(*) FROM articles "
+                    f"WHERE {col} IS NOT NULL AND {col} NOT IN ('是', '否')"
+                ).fetchone()[0]
 
     if "include" in existing_cols:
         stats["reviewed_yes"] = conn.execute(
@@ -381,6 +460,30 @@ def get_stats(
         ).fetchone()[0]
 
     return stats
+
+
+def reset_classification(
+    conn: sqlite3.Connection,
+    questions: list[Question],
+    *,
+    only_failed: bool = True,
+) -> dict[str, int]:
+    """把分类结果置回 NULL，以便下次 classify 重新处理。返回每个问题清空的行数。
+
+    only_failed=True：仅清理旧版本遗留的 `{qid}_ans = 'API错误'` 失败行。
+    only_failed=False：清空全部已分类结果（例如改了 prompt 想整体重跑）。
+    """
+    existing = {row[1] for row in conn.execute("PRAGMA table_info(articles)")}
+    counts: dict[str, int] = {}
+    for q in questions:
+        ans, rea = f"{q.id}_ans", f"{q.id}_rea"
+        if ans not in existing:
+            continue
+        where = f"{ans} = 'API错误'" if only_failed else f"{ans} IS NOT NULL"
+        cur = conn.execute(f"UPDATE articles SET {ans} = NULL, {rea} = NULL WHERE {where}")
+        counts[q.id] = cur.rowcount
+    conn.commit()
+    return counts
 
 
 def backup(db_path: Path) -> Path:

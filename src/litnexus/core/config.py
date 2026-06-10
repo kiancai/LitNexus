@@ -1,46 +1,34 @@
 """配置加载与验证模块。
 
-优先级（高 → 低）：
-  API key:  LITNEXUS_API_KEY > ARK_API_KEY > config.toml [ai].api_key
-  Base URL: LITNEXUS_BASE_URL > ARK_API_BASE_URL > config.toml [ai].base_url
-  配置路径: --config 命令行参数 > LITNEXUS_CONFIG 环境变量 > ~/.config/litnexus/config.toml
+配置随工作区走：每个工作区根目录下有一个 litnexus.toml。
+环境变量覆盖（高 → 低）在「使用时」由 get_api_key()/get_base_url()/resolved_ai()
+解析，而**不**在 load_config 时注入 Config 字段，以免被 save_config 误写回磁盘：
+  API key:  LITNEXUS_API_KEY > ARK_API_KEY > litnexus.toml [ai].api_key
+  Base URL: LITNEXUS_BASE_URL > ARK_API_BASE_URL > litnexus.toml [ai].base_url
 """
 
 from __future__ import annotations
 
 import os
+import re
 import tomllib
 from pathlib import Path
-from typing import Optional
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, ValidationError, field_validator
+
+# 合法 SQL 标识符（用作数据库列名 / 列前缀），防止列名拼进 SQL 时出错或注入
+_IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
-# ── 默认路径 ──────────────────────────────────────────────────────────────────
-DEFAULT_CONFIG_DIR = Path.home() / ".config" / "litnexus"
-DEFAULT_CONFIG_PATH = DEFAULT_CONFIG_DIR / "config.toml"
-DEFAULT_DATA_DIR = Path.home() / ".local" / "share" / "litnexus"
+def _check_identifier(value: str, what: str) -> str:
+    if not _IDENT_RE.match(value):
+        raise ValueError(
+            f"{what}必须是合法标识符（字母或下划线开头，仅含字母、数字、下划线）：{value!r}"
+        )
+    return value
 
 
 # ── Pydantic 模型 ─────────────────────────────────────────────────────────────
-
-class PathsConfig(BaseModel):
-    db: Path = DEFAULT_DATA_DIR / "epmc_articles.db"
-    download_dir: Path = DEFAULT_DATA_DIR / "download"
-    export_dir: Path = DEFAULT_DATA_DIR / "export"
-    journals_file: Path = DEFAULT_CONFIG_DIR / "journals.txt"
-    keywords_files: list[Path] = [DEFAULT_CONFIG_DIR / "keywords_1.txt"]
-
-    @field_validator("db", "download_dir", "export_dir", "journals_file", mode="before")
-    @classmethod
-    def expand_path(cls, v: str | Path) -> Path:
-        return Path(v).expanduser()
-
-    @field_validator("keywords_files", mode="before")
-    @classmethod
-    def expand_paths(cls, v: list) -> list[Path]:
-        return [Path(p).expanduser() for p in v]
-
 
 class DownloadConfig(BaseModel):
     days: int = 30
@@ -63,6 +51,11 @@ class Question(BaseModel):
     """一个分类问题，id 用作数据库列前缀（{id}_ans, {id}_rea）。"""
     id: str
     text: str
+
+    @field_validator("id")
+    @classmethod
+    def _validate_id(cls, v: str) -> str:
+        return _check_identifier(v, "分类问题 id")
 
 
 class ClassifyConfig(BaseModel):
@@ -94,9 +87,19 @@ class ClassifyConfig(BaseModel):
     ]
 
 
+class IngestConfig(BaseModel):
+    """额外从 EPMC 抓取并入库的字段 id（见 core/fields.py 的 OPTIONAL_FIELDS）。"""
+    extra_fields: list[str] = []
+
+
 class SchemaConfig(BaseModel):
     """用户自定义注释列（TEXT 类型，启动时自动添加到数据库）。"""
     custom_columns: list[str] = ["include", "tags"]
+
+    @field_validator("custom_columns")
+    @classmethod
+    def _validate_columns(cls, v: list[str]) -> list[str]:
+        return [_check_identifier(c, "自定义列名") for c in v]
 
 
 class ExportConfig(BaseModel):
@@ -109,8 +112,8 @@ class ExportConfig(BaseModel):
 
 
 class Config(BaseModel):
-    paths: PathsConfig = PathsConfig()
     download: DownloadConfig = DownloadConfig()
+    ingest: IngestConfig = IngestConfig()
     ai: AIConfig = AIConfig()
     translate: TranslateConfig = TranslateConfig()
     classify: ClassifyConfig = ClassifyConfig()
@@ -124,74 +127,88 @@ class ConfigError(Exception):
     pass
 
 
-def load_config(path: Optional[Path] = None) -> Config:
-    """加载配置文件，返回 Config 对象。"""
-    config_path: Path | None = path
-    if config_path is None:
-        env_path = os.environ.get("LITNEXUS_CONFIG")
-        if env_path:
-            config_path = Path(env_path).expanduser()
-        elif DEFAULT_CONFIG_PATH.exists():
-            config_path = DEFAULT_CONFIG_PATH
+def load_config(config_path: Path) -> Config:
+    """加载某工作区的 litnexus.toml，返回 Config 对象。
 
-    raw: dict = {}
-    if config_path is not None:
-        if not config_path.exists():
-            raise ConfigError(f"配置文件不存在：{config_path}")
+    环境变量覆盖**不**在此注入 Config 字段（否则会被 save_config 写回磁盘，
+    造成环境变量里的密钥泄漏）。运行期请用 get_api_key()/get_base_url()/
+    resolved_ai() 解析有效值。
+    """
+    if not config_path.exists():
+        raise ConfigError(f"配置文件不存在：{config_path}")
+    try:
         with open(config_path, "rb") as f:
             raw = tomllib.load(f)
+    except tomllib.TOMLDecodeError as e:
+        raise ConfigError(f"配置文件 TOML 语法错误（{config_path}）：{e}") from e
 
     # TOML 中 [schema] 对应模型字段 schema_cfg
     if "schema" in raw and "schema_cfg" not in raw:
         raw["schema_cfg"] = raw.pop("schema")
 
-    cfg = Config.model_validate(raw)
+    try:
+        return Config.model_validate(raw)
+    except ValidationError as e:
+        raise ConfigError(f"配置文件校验失败（{config_path}）：\n{e}") from e
 
-    cfg.ai.api_key = (
+
+def get_api_key(cfg: Config) -> str:
+    """返回有效的 API key（环境变量优先），找不到则抛出 ConfigError。
+
+    优先级：LITNEXUS_API_KEY > ARK_API_KEY > litnexus.toml [ai].api_key
+    """
+    key = (
         os.environ.get("LITNEXUS_API_KEY")
         or os.environ.get("ARK_API_KEY")
         or cfg.ai.api_key
     )
-    cfg.ai.base_url = (
+    if not key:
+        raise ConfigError(
+            "未找到 API key。请通过以下任一方式设置：\n"
+            "  1. 环境变量 LITNEXUS_API_KEY 或 ARK_API_KEY\n"
+            "  2. litnexus.toml 中的 [ai].api_key 字段"
+        )
+    return key
+
+
+def get_base_url(cfg: Config) -> str:
+    """返回有效的 AI base URL（环境变量优先）。
+
+    优先级：LITNEXUS_BASE_URL > ARK_API_BASE_URL > litnexus.toml [ai].base_url
+    """
+    return (
         os.environ.get("LITNEXUS_BASE_URL")
         or os.environ.get("ARK_API_BASE_URL")
         or cfg.ai.base_url
     )
 
-    return cfg
 
+def resolved_ai(cfg: Config) -> AIConfig:
+    """返回一份解析了环境变量覆盖的 AIConfig 副本（供运行期调用 AI 使用）。
 
-def get_api_key(cfg: Config) -> str:
-    """返回有效的 API key，找不到则抛出 ConfigError。"""
-    key = cfg.ai.api_key
-    if not key:
-        raise ConfigError(
-            "未找到 API key。请通过以下任一方式设置：\n"
-            "  1. 环境变量 LITNEXUS_API_KEY 或 ARK_API_KEY\n"
-            "  2. config.toml 中的 [ai].api_key 字段"
-        )
-    return key
+    刻意不修改传入的 cfg —— 避免把仅存在于环境变量里的密钥/URL 注入 Config 字段，
+    进而被 save_config 落盘（环境变量泄漏）。
+    """
+    return cfg.ai.model_copy(
+        update={"api_key": get_api_key(cfg), "base_url": get_base_url(cfg)}
+    )
 
 
 # ── init-config 默认文件内容 ──────────────────────────────────────────────────
 
 DEFAULT_CONFIG_TOML = """\
-# LitNexus 配置文件
-# 运行 `litnexus init-config` 生成此文件
-
-[paths]
-db = "~/.local/share/litnexus/epmc_articles.db"
-download_dir = "~/.local/share/litnexus/download"
-export_dir = "~/.local/share/litnexus/export"
-journals_file = "~/.config/litnexus/journals.txt"
-keywords_files = [
-    "~/.config/litnexus/keywords_1.txt",
-]
+# LitNexus 配置文件（位于工作区根目录）
+# 由 `litnexus init` 生成，也可用 GUI 编辑
 
 [download]
 days = 30
 page_size = 1000
 request_delay = 0.5
+
+[ingest]
+# 额外抓取的 EPMC 字段（可选，默认不抓）。可用 id：
+#   cited_by_count, is_open_access, in_epmc, has_pdf, pub_type, mesh_terms, language, issn
+extra_fields = []
 
 [ai]
 # 留空则依赖 LITNEXUS_API_KEY 或 ARK_API_KEY 环境变量
@@ -227,18 +244,7 @@ exclude_columns = [
 ]
 """
 
-DEFAULT_JOURNALS_TXT = """\
-# 期刊列表（每行一个，# 开头为注释）
-# 期刊名称需与 Europe PMC 数据库中的名称完全一致
-# 示例：
-# Nature
-# Nature microbiology
-# Cell
-"""
+# 检索列表模板留空：格式说明改由 GUI 的 ? 提示（help.toml）承载，不再塞进文本框。
+DEFAULT_JOURNALS_TXT = ""
 
-DEFAULT_KEYWORDS_TXT = """\
-# 关键词检索式（每行一个，支持 Europe PMC 布尔表达式语法）
-# 示例：
-# (microbiome OR microbiota) AND "machine learning"
-# TITLE:(deep learning) AND ABSTRACT:(single cell)
-"""
+DEFAULT_KEYWORDS_TXT = ""

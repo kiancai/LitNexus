@@ -10,14 +10,25 @@ import json
 import logging
 import re
 import sqlite3
+from typing import Any
 
-from openai import AsyncOpenAI, APIError, RateLimitError
+from openai import APIError, AsyncOpenAI, RateLimitError
 from tqdm.asyncio import tqdm_asyncio
 
 from litnexus.core import db as db_mod
-from litnexus.core.config import TranslateConfig, AIConfig
+from litnexus.core.config import AIConfig, TranslateConfig
 
 logger = logging.getLogger(__name__)
+
+# 限流退避：最多重试 _MAX_RETRIES 次，第 n 次等待 min(BASE*2^n, CAP) 秒
+_MAX_RETRIES = 5
+_BACKOFF_BASE = 2.0
+_BACKOFF_CAP = 60.0
+
+
+def _backoff_delay(attempt: int) -> float:
+    return min(_BACKOFF_BASE * (2**attempt), _BACKOFF_CAP)
+
 
 _SYSTEM_PROMPT = (
     "You are a professional academic translator. "
@@ -66,12 +77,20 @@ async def _translate_single(
         resp = await client.chat.completions.create(
             model=cfg_ai.model,
             messages=[
-                {"role": "system", "content": "You are a professional academic translator. Translate the English article title into concise, accurate Chinese. Output ONLY the translation."},
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a professional academic translator. Translate the "
+                        "English article title into concise, accurate Chinese. "
+                        "Output ONLY the translation."
+                    ),
+                },
                 {"role": "user", "content": title},
             ],
             temperature=0.1,
         )
-        return resp.choices[0].message.content.strip()
+        content = resp.choices[0].message.content
+        return content.strip() if content else None
     except Exception as e:
         logger.warning(f"单条翻译失败 ({epmc_id}): {e}")
         return None
@@ -81,8 +100,13 @@ async def _translate_batch(
     client: AsyncOpenAI,
     batch: list[tuple[str, str]],
     cfg_ai: AIConfig,
+    attempt: int = 0,
 ) -> list[tuple[str, str | None]]:
-    """翻译一批标题，返回 [(epmc_id, title_zh | None)]。"""
+    """翻译一批标题，返回 [(epmc_id, title_zh | None)]。
+
+    限流（RateLimitError）按指数退避重试，最多 _MAX_RETRIES 次；超出后整批返回
+    None（保持未翻译，下次运行自然重试），不会无限挂起。
+    """
     id_to_epmc = {i + 1: epmc_id for i, (epmc_id, _) in enumerate(batch)}
     payload = [{"id": i + 1, "title": title} for i, (_, title) in enumerate(batch)]
 
@@ -95,11 +119,17 @@ async def _translate_batch(
             ],
             temperature=0.1,
         )
-        content = resp.choices[0].message.content.strip()
+        content = (resp.choices[0].message.content or "").strip()
     except RateLimitError:
-        logger.warning("触发速率限制，等待 30 秒后重试...")
-        await asyncio.sleep(30)
-        return await _translate_batch(client, batch, cfg_ai)
+        if attempt < _MAX_RETRIES:
+            delay = _backoff_delay(attempt)
+            logger.warning(
+                f"触发速率限制，{delay:.0f}s 后重试（第 {attempt + 1}/{_MAX_RETRIES} 次）..."
+            )
+            await asyncio.sleep(delay)
+            return await _translate_batch(client, batch, cfg_ai, attempt + 1)
+        logger.error(f"速率限制重试 {_MAX_RETRIES} 次仍失败，本批跳过（保持未翻译）。")
+        return [(epmc_id, None) for epmc_id, _ in batch]
     except APIError as e:
         logger.error(f"API 错误：{e}")
         return [(epmc_id, None) for epmc_id, _ in batch]
@@ -128,6 +158,7 @@ async def run_translation(
     conn: sqlite3.Connection,
     cfg_translate: TranslateConfig,
     cfg_ai: AIConfig,
+    reporter: Any | None = None,
 ) -> tuple[int, int]:
     """完整翻译流程，返回 (translated, failed)。"""
     pending = db_mod.fetch_pending_translations(conn)
@@ -152,8 +183,14 @@ async def run_translation(
     tasks = [process(b) for b in batches]
     translated = failed = 0
     buffer: list[tuple[str, str | None]] = []
+    task_id = reporter.add_task("翻译标题", total=len(tasks)) if reporter is not None else None
 
-    for future in tqdm_asyncio.as_completed(tasks, total=len(tasks), desc="翻译进度"):
+    if reporter is not None:
+        futures = asyncio.as_completed(tasks)
+    else:
+        futures = tqdm_asyncio.as_completed(tasks, total=len(tasks), desc="翻译进度")
+
+    for future in futures:
         batch_results = await future
         buffer.extend(batch_results)
         for _, t in batch_results:
@@ -161,6 +198,8 @@ async def run_translation(
                 translated += 1
             else:
                 failed += 1
+        if reporter is not None:
+            reporter.update(task_id, advance=1)
         if len(buffer) >= 500:
             db_mod.update_translations(conn, buffer)
             buffer.clear()
@@ -168,4 +207,6 @@ async def run_translation(
     if buffer:
         db_mod.update_translations(conn, buffer)
 
+    if reporter is not None:
+        reporter.complete(task_id)
     return translated, failed
