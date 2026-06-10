@@ -16,7 +16,6 @@ dependencies = [
     "requests>=2.32",
     "openai>=1.30",
     "tqdm>=4.66",
-    "pandas>=2.2",
     "pydantic>=2.7",
     "nicegui>=2",
 ]

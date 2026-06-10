@@ -88,7 +88,7 @@ def export_articles(
 
     filter_mode 非法（如 pending 模式缺 include 列）时由 db.fetch_for_export 抛 ValueError。
     """
-    df = db_mod.fetch_for_export(conn, filter_mode)
-    if df.empty:
+    columns, rows = db_mod.fetch_for_export(conn, filter_mode)
+    if not rows:
         return 0
-    return io_mod.export_to_csv(df, output, cfg.export.exclude_columns)
+    return io_mod.export_to_csv(columns, rows, output, cfg.export.exclude_columns)

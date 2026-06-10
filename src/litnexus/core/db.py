@@ -19,8 +19,6 @@ from typing import TYPE_CHECKING
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
-    import pandas as pd
-
     from litnexus.core.config import Config, Question
 
 SCHEMA_VERSION = 2
@@ -390,15 +388,16 @@ def apply_review(
 
 # ── 导出 ──────────────────────────────────────────────────────────────────────
 
-def fetch_for_export(conn: sqlite3.Connection, filter_mode: str) -> pd.DataFrame:
-    """按 filter_mode 导出文章 DataFrame。
+def fetch_for_export(
+    conn: sqlite3.Connection, filter_mode: str
+) -> tuple[list[str], list[sqlite3.Row]]:
+    """按 filter_mode 查询待导出的文章，返回 (列名列表, 行列表)。
 
     filter_mode:
       "pending" — include IS NULL（需 include 列存在）
       "all"     — 全部
       其他      — 作为 SQL WHERE 子句
     """
-    import pandas as pd  # 懒导入，仅导出时需要
     if filter_mode == "pending":
         cols = {row[1] for row in conn.execute("PRAGMA table_info(articles)")}
         if "include" not in cols:
@@ -411,9 +410,9 @@ def fetch_for_export(conn: sqlite3.Connection, filter_mode: str) -> pd.DataFrame
         where = "1=1"
     else:
         where = filter_mode
-    return pd.read_sql_query(
-        f"SELECT * FROM articles WHERE {where} ORDER BY pub_year DESC", conn
-    )
+    cur = conn.execute(f"SELECT * FROM articles WHERE {where} ORDER BY pub_year DESC")
+    columns = [d[0] for d in cur.description]
+    return columns, cur.fetchall()
 
 
 # ── 统计与维护 ────────────────────────────────────────────────────────────────

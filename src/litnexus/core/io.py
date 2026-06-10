@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 import datetime
 import json
 import sqlite3
@@ -9,8 +10,6 @@ import sys
 from collections.abc import Iterator
 from pathlib import Path
 from typing import TYPE_CHECKING
-
-import pandas as pd
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -73,23 +72,29 @@ def parse_article(raw: dict, extra_fields: Sequence[FieldSpec] = ()) -> dict:
     return record
 
 
-def export_to_csv(df: pd.DataFrame, output_path: Path, exclude_columns: list[str]) -> int:
-    """保存 CSV（utf-8-sig），返回行数。"""
+def export_to_csv(
+    columns: Sequence[str],
+    rows: Sequence[Sequence],
+    output_path: Path,
+    exclude_columns: list[str],
+) -> int:
+    """保存 CSV（utf-8-sig，Excel 可直接打开），返回行数。"""
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    df = df.drop(columns=[c for c in exclude_columns if c in df.columns])
-    df.to_csv(output_path, index=False, encoding="utf-8-sig")
-    return len(df)
+    keep = [i for i, c in enumerate(columns) if c not in exclude_columns]
+    with open(output_path, "w", encoding="utf-8-sig", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow([columns[i] for i in keep])
+        for row in rows:
+            writer.writerow([row[i] for i in keep])
+    return len(rows)
 
 
 def normalize_value(v) -> str | None:
-    """将 pandas NA / 空字符串 / 'N/A' 标准化为 None。"""
+    """将 None / NaN / 空字符串 / 'N/A' 标准化为 None。"""
     if v is None:
         return None
-    try:
-        if pd.isna(v):
-            return None
-    except (TypeError, ValueError):
-        pass
+    if isinstance(v, float) and v != v:  # NaN
+        return None
     s = str(v).strip()
     if s == "" or s.upper() == "N/A":
         return None
@@ -111,30 +116,34 @@ def import_reviewed_csv(
     """
     from litnexus.core import db as db_mod
 
-    df = pd.read_csv(csv_path, dtype=str, encoding="utf-8-sig")
-    total = len(df)
+    with open(csv_path, encoding="utf-8-sig", newline="") as f:
+        reader = csv.DictReader(f)
+        header = reader.fieldnames or []
+        raw_rows = list(reader)
+
+    total = len(raw_rows)
     if total == 0:
         return 0, 0, 0
 
-    key_cols = [c for c in ("epmc_id", "pmid", "doi") if c in df.columns]
+    key_cols = [c for c in ("epmc_id", "pmid", "doi") if c in header]
     if not key_cols:
         raise ValueError("CSV 缺少匹配键列（需要 epmc_id / pmid / doi 之一）。")
 
-    ann_cols = [c for c in annotation_columns if c in df.columns]
+    ann_cols = [c for c in annotation_columns if c in header]
     if not ann_cols:
         raise ValueError(
             f"CSV 中没有可写回的标注列（期望之一：{', '.join(annotation_columns)}）。"
         )
 
     rows: list[dict] = []
-    for _, r in df.iterrows():
+    for r in raw_rows:
         row: dict = {}
         for k in key_cols:
-            v = normalize_value(r[k])
+            v = normalize_value(r.get(k))
             if v is not None:
                 row[k] = v
         for c in ann_cols:
-            v = normalize_value(r[c])
+            v = normalize_value(r.get(c))
             if c == "include" and v is not None:
                 v = v.lower()
             row[c] = v

@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import csv
 import json
 
-import pandas as pd
 import pytest
 
 from litnexus.core import db as db_mod
@@ -13,6 +13,11 @@ from litnexus.core import pipeline as pipeline_mod
 
 def _write_jsonl(path, rows):
     path.write_text("\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
+
+
+def _read_csv(path):
+    with open(path, encoding="utf-8-sig", newline="") as f:
+        return list(csv.DictReader(f))
 
 
 # ── merge_jsonl ───────────────────────────────────────────────────────────────
@@ -72,10 +77,10 @@ def test_export_articles_writes_csv_and_drops_excluded(ws_cfg, tmp_path):
     n = pipeline_mod.export_articles(conn, cfg, "all", out)
 
     assert n == 2 and out.exists()
-    df = pd.read_csv(out, dtype=str, encoding="utf-8-sig")
-    assert set(df["epmc_id"]) == {"E1", "E2"}
+    rows = _read_csv(out)
+    assert {r["epmc_id"] for r in rows} == {"E1", "E2"}
     for c in cfg.export.exclude_columns:
-        assert c not in df.columns  # 排除列已被 drop
+        assert c not in rows[0]  # 排除列已被 drop
     conn.close()
 
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-import pandas as pd
+import csv
+
 import pytest
 from pydantic import ValidationError
 
@@ -18,6 +19,19 @@ from litnexus.core.config import (
 from litnexus.core.config_saver import save_config
 from litnexus.core.io import export_to_csv, import_reviewed_csv, parse_article
 from litnexus.core.workspace import create_workspace
+
+
+def _read_csv(path):
+    with open(path, encoding="utf-8-sig", newline="") as f:
+        reader = csv.DictReader(f)
+        return list(reader.fieldnames or []), list(reader)
+
+
+def _write_csv(path, fieldnames, rows):
+    with open(path, "w", encoding="utf-8-sig", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
 
 
 def make_article(epmc_id, pmid=None, doi=None, **extra):
@@ -129,17 +143,21 @@ def test_review_roundtrip(ws_cfg, tmp_path):
         conn,
         [make_article("E1", pmid="1", doi="d1"), make_article("E2", pmid="2", doi="d2")],
     )
-    csv = tmp_path / "review.csv"
-    export_to_csv(db_mod.fetch_for_export(conn, "all"), csv, cfg.export.exclude_columns)
+    csv_path = tmp_path / "review.csv"
+    columns, db_rows = db_mod.fetch_for_export(conn, "all")
+    export_to_csv(columns, db_rows, csv_path, cfg.export.exclude_columns)
 
-    d = pd.read_csv(csv, dtype=str, encoding="utf-8-sig")
-    assert "epmc_id" in d.columns  # 没有被 BOM 污染
-    d.loc[d.epmc_id == "E1", "include"] = "YES"  # 大小写归一化
-    d.loc[d.epmc_id == "E2", "include"] = "no"
-    d.loc[d.epmc_id == "E1", "tags"] = "priority"
-    d.to_csv(csv, index=False, encoding="utf-8-sig")
+    header, rows = _read_csv(csv_path)
+    assert "epmc_id" in header  # 没有被 BOM 污染
+    for r in rows:
+        if r["epmc_id"] == "E1":
+            r["include"] = "YES"  # 大小写归一化
+            r["tags"] = "priority"
+        elif r["epmc_id"] == "E2":
+            r["include"] = "no"
+    _write_csv(csv_path, header, rows)
 
-    assert import_reviewed_csv(conn, csv, cfg.schema_cfg.custom_columns) == (2, 0, 2)
+    assert import_reviewed_csv(conn, csv_path, cfg.schema_cfg.custom_columns) == (2, 0, 2)
     stats = db_mod.get_stats(conn, cfg.classify.questions)
     assert stats["reviewed_yes"] == 1 and stats["reviewed_no"] == 1
     e1 = dict(conn.execute("SELECT include, tags FROM articles WHERE epmc_id='E1'").fetchone())
@@ -147,10 +165,11 @@ def test_review_roundtrip(ws_cfg, tmp_path):
 
     # 留空的单元格不应抹掉已有标注
     blanked = tmp_path / "blank.csv"
-    d2 = pd.read_csv(csv, dtype=str, encoding="utf-8-sig")
-    d2["include"] = ""
-    d2["tags"] = ""
-    d2.to_csv(blanked, index=False, encoding="utf-8-sig")
+    header2, rows2 = _read_csv(csv_path)
+    for r in rows2:
+        r["include"] = ""
+        r["tags"] = ""
+    _write_csv(blanked, header2, rows2)
     import_reviewed_csv(conn, blanked, cfg.schema_cfg.custom_columns)
     e1b = dict(conn.execute("SELECT include, tags FROM articles WHERE epmc_id='E1'").fetchone())
     assert e1b == {"include": "yes", "tags": "priority"}
@@ -160,10 +179,10 @@ def test_review_roundtrip(ws_cfg, tmp_path):
 def test_import_requires_key_column(ws_cfg, tmp_path):
     ws, cfg = ws_cfg
     conn = db_mod.get_connection(ws.db_path, cfg)
-    csv = tmp_path / "bad.csv"
-    pd.DataFrame({"include": ["yes"]}).to_csv(csv, index=False, encoding="utf-8-sig")
+    csv_path = tmp_path / "bad.csv"
+    _write_csv(csv_path, ["include"], [{"include": "yes"}])
     with pytest.raises(ValueError):
-        import_reviewed_csv(conn, csv, cfg.schema_cfg.custom_columns)
+        import_reviewed_csv(conn, csv_path, cfg.schema_cfg.custom_columns)
     conn.close()
 
 
