@@ -12,9 +12,8 @@ jobs:
         include:
           - os: ubuntu-latest
             artifact: litnexus-linux-x86_64
-          - os: macos-13
-            artifact: litnexus-macos-x86_64
-            app: LitNexus-macos-x86_64
+          # macOS Intel（macos-13）已弃用：GitHub 正逐步下线 Intel runner（排队极慢），
+          # 且 Apple 已全面转向 Apple Silicon。只构建 arm64 版。
           - os: macos-latest
             artifact: litnexus-macos-arm64
             app: LitNexus-macos-arm64
