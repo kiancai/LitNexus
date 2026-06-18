@@ -14,7 +14,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from litnexus.core import db as db_mod
-from litnexus.core import fields as fields_mod
 from litnexus.core import io as io_mod
 
 if TYPE_CHECKING:
@@ -50,7 +49,6 @@ def merge_jsonl(
 
     缺 epmc_id 的记录计入 errors 并跳过。不打印任何 UI，仅经 reporter 上报进度。
     """
-    extra = fields_mod.active_extra_fields(cfg.ingest.extra_fields)
     files = sorted(src_dir.glob("*.jsonl"))
     inserted = skipped = errors = 0
     task_id = reporter.add_task("合并 JSONL", total=len(files)) if reporter is not None else None
@@ -60,7 +58,7 @@ def merge_jsonl(
         batch = []
         file_errors = 0
         for raw in io_mod.iter_jsonl(fpath):
-            parsed = io_mod.parse_article(raw, extra)
+            parsed = io_mod.parse_article(raw)
             if parsed.get("epmc_id"):
                 batch.append(parsed)
             else:

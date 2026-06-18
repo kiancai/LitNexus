@@ -46,22 +46,6 @@ def test_merge_jsonl_inserts_dedups_and_counts_errors(ws_cfg):
     conn.close()
 
 
-def test_merge_jsonl_extra_fields_ingested(ws_cfg):
-    ws, cfg = ws_cfg
-    cfg.ingest.extra_fields = ["cited_by_count"]
-    conn = db_mod.get_connection(ws.db_path, cfg)  # 建出 cited_by_count 列
-    _write_jsonl(ws.downloads_dir / "a.jsonl", [
-        {"id": "E1", "pmid": "1", "title": "T1", "pubYear": "2026", "citedByCount": 7},
-    ])
-
-    r = pipeline_mod.merge_jsonl(conn, cfg, ws.downloads_dir)
-
-    assert (r.inserted, r.skipped, r.errors) == (1, 0, 0)
-    val = conn.execute("SELECT cited_by_count FROM articles WHERE epmc_id='E1'").fetchone()[0]
-    assert val == 7
-    conn.close()
-
-
 # ── export_articles ───────────────────────────────────────────────────────────
 
 

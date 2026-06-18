@@ -10,19 +10,14 @@ days = 30           # 抓取最近 N 天内首次发表的文章
 page_size = 1000    # 每页 API 返回数量（建议保持 1000）
 request_delay = 0.5 # 每页请求之间的间隔秒数，避免被限速
 
-[ingest]
-# 额外从 Europe PMC 抓取并入库的字段 id（可选，默认不抓）。可用 id：
-#   cited_by_count, is_open_access, in_epmc, has_pdf, pub_type, mesh_terms, language, issn
-# 勾选后需重新 merge 才会建列并写入。
-extra_fields = []
-
 [ai]
+# 无内置默认值：请填你自己的 OpenAI 兼容服务商接口与模型。
 # API key 优先级：环境变量 LITNEXUS_API_KEY > ARK_API_KEY > 此处 api_key
 # Base URL 优先级：环境变量 LITNEXUS_BASE_URL > ARK_API_BASE_URL > 此处 base_url
 # 留空 api_key 则依赖环境变量（推荐，避免密钥写入文件）
 api_key = ""
-base_url = "https://ark.cn-beijing.volces.com/api/v3"
-model = "doubao-1-5-pro-32k-character-250715"
+base_url = ""
+model = ""
 
 [translate]
 batch_size = 30   # 每次 API 调用翻译多少个标题

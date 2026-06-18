@@ -81,22 +81,15 @@ def get_connection(db_path: Path, cfg: Config | None = None) -> sqlite3.Connecti
 
 
 def ensure_dynamic_columns(conn: sqlite3.Connection, cfg: Config) -> None:
-    """确保配置所需的动态列存在：额外 EPMC 字段、问题列、自定义标注列。
+    """确保配置所需的动态列存在：问题列（{id}_ans / {id}_rea）、自定义标注列。
 
     若列不存在则自动 ALTER TABLE ADD COLUMN；并为常用过滤列建索引。
     """
-    from litnexus.core.fields import active_extra_fields
-
     questions = cfg.classify.questions
     custom_cols = cfg.schema_cfg.custom_columns
 
     existing = {row[1] for row in conn.execute("PRAGMA table_info(articles)")}
     added = []
-
-    for spec in active_extra_fields(cfg.ingest.extra_fields):
-        if spec.id not in existing:
-            conn.execute(f"ALTER TABLE articles ADD COLUMN {spec.id} {spec.sql_type}")
-            added.append(spec.id)
 
     for q in questions:
         for suffix in ("_ans", "_rea"):

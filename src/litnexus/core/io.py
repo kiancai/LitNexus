@@ -14,8 +14,6 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-    from litnexus.core.fields import FieldSpec
-
 
 def iter_jsonl(filepath: Path) -> Iterator[dict]:
     """逐行读取 JSONL，跳过空行和解析错误行。"""
@@ -30,11 +28,8 @@ def iter_jsonl(filepath: Path) -> Iterator[dict]:
                 print(f"  警告：{filepath.name} 第 {i} 行 JSON 格式错误，已跳过", file=sys.stderr)
 
 
-def parse_article(raw: dict, extra_fields: Sequence[FieldSpec] = ()) -> dict:
-    """将 EPMC API 原始 JSON 映射到 DB schema 字段。
-
-    extra_fields：额外要抓取的可选字段（来自 fields.active_extra_fields）。
-    """
+def parse_article(raw: dict) -> dict:
+    """将 EPMC API 原始 JSON 映射到 DB schema 字段。"""
     epmc_id = raw.get("id")
     pmid = raw.get("pmid") or None
     doi = raw.get("doi") or None
@@ -67,8 +62,6 @@ def parse_article(raw: dict, extra_fields: Sequence[FieldSpec] = ()) -> dict:
         "journal_info_json": json.dumps(journal_info) if journal_info else None,
         "keyword_list_json": json.dumps(raw["keywordList"]) if raw.get("keywordList") else None,
     }
-    for spec in extra_fields:
-        record[spec.id] = spec.extract(raw)
     return record
 
 

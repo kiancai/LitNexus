@@ -6,7 +6,6 @@ import pytest
 from pydantic import ValidationError
 
 from litnexus.core import db as db_mod
-from litnexus.core import fields as fields_mod
 from litnexus.core.config import (
     ConfigError,
     Question,
@@ -17,7 +16,7 @@ from litnexus.core.config import (
     resolved_ai,
 )
 from litnexus.core.config_saver import save_config
-from litnexus.core.io import export_to_csv, import_reviewed_csv, parse_article
+from litnexus.core.io import export_to_csv, import_reviewed_csv
 from litnexus.core.workspace import create_workspace
 
 
@@ -53,7 +52,6 @@ def make_article(epmc_id, pmid=None, doi=None, **extra):
 
 def test_config_defaults(ws_cfg):
     _ws, cfg = ws_cfg
-    assert cfg.ingest.extra_fields == []
     assert [q.id for q in cfg.classify.questions] == ["q1", "q2"]
     assert cfg.schema_cfg.custom_columns == ["include", "tags"]
 
@@ -86,17 +84,7 @@ def test_env_key_not_persisted(isolated_state, monkeypatch):
     assert load_config(ws.config_path).ai.api_key == ""
 
 
-# ── 字段注册表 ────────────────────────────────────────────────────────────────
-
-
-def test_fields_registry():
-    ids = [fid for fid, _ in fields_mod.available_extra_fields()]
-    assert "cited_by_count" in ids and "mesh_terms" in ids
-    specs = fields_mod.active_extra_fields(["cited_by_count", "bogus_unknown"])
-    assert [s.id for s in specs] == ["cited_by_count"]  # 未知 id 被忽略
-
-
-# ── 入库 / 去重 / 额外字段 ────────────────────────────────────────────────────
+# ── 入库 / 去重 ──────────────────────────────────────────────────────────────
 
 
 def test_dedup_on_pmid(ws_cfg):
@@ -106,30 +94,6 @@ def test_dedup_on_pmid(ws_cfg):
     ins2, skip2 = db_mod.insert_articles(conn, [make_article("E2", pmid="1", doi="d2")])
     assert ins1 == 1
     assert (ins2, skip2) == (0, 1)  # 相同 pmid 被 UNIQUE 约束跳过
-    conn.close()
-
-
-def test_extra_fields_ingested(ws_cfg):
-    ws, cfg = ws_cfg
-    cfg.ingest.extra_fields = ["cited_by_count", "mesh_terms"]
-    conn = db_mod.get_connection(ws.db_path, cfg)
-    cols = {r[1] for r in conn.execute("PRAGMA table_info(articles)")}
-    assert {"cited_by_count", "mesh_terms"} <= cols
-    raw = {
-        "id": "E1", "pmid": "1", "title": "T", "abstractText": "A", "pubYear": "2026",
-        "citedByCount": 9,
-        "meshHeadingList": {"meshHeading": [{"descriptorName": "Genomics"}]},
-    }
-    parsed = parse_article(raw, fields_mod.active_extra_fields(cfg.ingest.extra_fields))
-    assert parsed["cited_by_count"] == 9
-    assert parsed["mesh_terms"] == "Genomics"
-    assert db_mod.insert_articles(conn, [parsed]) == (1, 0)
-    row = dict(
-        conn.execute(
-            "SELECT cited_by_count, mesh_terms FROM articles WHERE epmc_id='E1'"
-        ).fetchone()
-    )
-    assert row == {"cited_by_count": 9, "mesh_terms": "Genomics"}
     conn.close()
 
 
@@ -241,7 +205,6 @@ def test_config_saver_roundtrip(ws_cfg):
     cfg.translate.batch_size = 50
     cfg.classify.questions = [Question(id="qa", text="text a"), Question(id="qb", text="text b")]
     cfg.schema_cfg.custom_columns = ["include", "tags", "priority"]
-    cfg.ingest.extra_fields = ["cited_by_count"]
     cfg.export.filter = "all"
 
     save_config(cfg, ws.config_path)
@@ -251,7 +214,6 @@ def test_config_saver_roundtrip(ws_cfg):
     assert reloaded.translate.batch_size == 50
     assert [q.id for q in reloaded.classify.questions] == ["qa", "qb"]
     assert reloaded.schema_cfg.custom_columns == ["include", "tags", "priority"]
-    assert reloaded.ingest.extra_fields == ["cited_by_count"]
     assert reloaded.export.filter == "all"
     assert reloaded.model_dump() == cfg.model_dump()  # 完整等价
 

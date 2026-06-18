@@ -104,17 +104,13 @@ days = 30           # 抓取最近 N 天内首次发表的文章
 page_size = 1000    # 每页返回数量（建议保持 1000）
 request_delay = 0.5 # 每页请求之间的间隔（秒），避免被限速
 
-[ingest]
-# 额外从 Europe PMC 抓取并入库的字段 id（可选）。可用 id：
-#   cited_by_count, is_open_access, in_epmc, has_pdf, pub_type, mesh_terms, language, issn
-extra_fields = []
-
 [ai]
+# 无内置默认值：请填你自己的 OpenAI 兼容服务商接口与模型。
 # API key 优先级：环境变量 LITNEXUS_API_KEY > ARK_API_KEY > 此处 api_key
 # Base URL 优先级：环境变量 LITNEXUS_BASE_URL > ARK_API_BASE_URL > 此处 base_url
 api_key = ""
-base_url = "https://ark.cn-beijing.volces.com/api/v3"
-model = "doubao-1-5-pro-32k-character-250715"
+base_url = ""
+model = ""
 
 [translate]
 batch_size = 30   # 每次 API 调用翻译多少个标题
@@ -398,15 +394,15 @@ uv run litnexus gui --port 9000  # 换端口
 uv run litnexus gui --native     # 原生桌面窗口（需 `uv sync --extra desktop` 装 pywebview）
 ```
 
-也可以直接从 GitHub Release 下载桌面版（macOS `.app` / Windows `.exe`），双击即进图形界面，无需安装 Python 或 uv。
+也可以直接从 GitHub Release 下载桌面版（macOS `.app` / Windows 解压后双击 `.exe`），双击即进图形界面，无需安装 Python 或 uv。
 
-界面自上而下分三段：
+首次打开一个新项目会进入**设置向导**：先填期刊/关键词检索列表（已预置示例），再填 AI 接口（无默认值，含「测试连接」），完成即可用。之后通过左侧边栏在三个独立子页间切换：
 
-- **数据**：数据库统计卡片、导出 CSV、把编辑过的 CSV 拖拽导入回写。
 - **运行**：选择下载模式/天数，分步或一键执行下载→合并→翻译→分类，实时日志。
-- **配置**：编辑期刊/关键词、AI 接口（含「测试连接」）、分类问题、自定义列、额外字段、各项参数与导出筛选，保存即写回 `litnexus.toml`。
+- **数据**：数据库统计卡片、导出 CSV、把编辑过的 CSV 拖拽导入回写。
+- **配置**：编辑期刊/关键词、AI 接口（含「测试连接」）、分类问题；不常动的项（各项参数、导出筛选/排除列、标注列、项目位置）收在「高级」与「项目位置」折叠区。保存即写回 `litnexus.toml`。
 
-右上角可切换深色/浅色主题、切换或新建工作区。字段旁的 `?` 悬停有说明（文案来自可编辑的 `help.toml`）。
+左侧边栏底部可切换深色/浅色主题、打开项目目录、切换项目。字段旁的 `?` 悬停有说明（文案来自可编辑的 `help.toml`）。
 
 ---
 

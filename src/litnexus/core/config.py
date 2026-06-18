@@ -37,9 +37,10 @@ class DownloadConfig(BaseModel):
 
 
 class AIConfig(BaseModel):
+    # 无内置默认值：每个用户必须自行填写自己的服务商接口与模型，避免新装即指向某家服务。
     api_key: str = ""
-    base_url: str = "https://ark.cn-beijing.volces.com/api/v3"
-    model: str = "doubao-1-5-pro-32k-character-250715"
+    base_url: str = ""
+    model: str = ""
 
 
 class TranslateConfig(BaseModel):
@@ -87,11 +88,6 @@ class ClassifyConfig(BaseModel):
     ]
 
 
-class IngestConfig(BaseModel):
-    """额外从 EPMC 抓取并入库的字段 id（见 core/fields.py 的 OPTIONAL_FIELDS）。"""
-    extra_fields: list[str] = []
-
-
 class SchemaConfig(BaseModel):
     """用户自定义注释列（TEXT 类型，启动时自动添加到数据库）。"""
     custom_columns: list[str] = ["include", "tags"]
@@ -113,7 +109,6 @@ class ExportConfig(BaseModel):
 
 class Config(BaseModel):
     download: DownloadConfig = DownloadConfig()
-    ingest: IngestConfig = IngestConfig()
     ai: AIConfig = AIConfig()
     translate: TranslateConfig = TranslateConfig()
     classify: ClassifyConfig = ClassifyConfig()
@@ -205,16 +200,12 @@ days = 30
 page_size = 1000
 request_delay = 0.5
 
-[ingest]
-# 额外抓取的 EPMC 字段（可选，默认不抓）。可用 id：
-#   cited_by_count, is_open_access, in_epmc, has_pdf, pub_type, mesh_terms, language, issn
-extra_fields = []
-
 [ai]
-# 留空则依赖 LITNEXUS_API_KEY 或 ARK_API_KEY 环境变量
+# 无默认值，请填写你自己的 OpenAI 兼容服务商接口。
+# api_key 留空则依赖 LITNEXUS_API_KEY 或 ARK_API_KEY 环境变量。
 api_key = ""
-base_url = "https://ark.cn-beijing.volces.com/api/v3"
-model = "doubao-1-5-pro-32k-character-250715"
+base_url = ""
+model = ""
 
 [translate]
 batch_size = 30
@@ -244,7 +235,19 @@ exclude_columns = [
 ]
 """
 
-# 检索列表模板留空：格式说明改由 GUI 的 ? 提示（help.toml）承载，不再塞进文本框。
-DEFAULT_JOURNALS_TXT = ""
+# 检索列表模板：预填几条通用示例，让新用户一眼看懂格式，可直接增删。
+DEFAULT_JOURNALS_TXT = """\
+# 每行一个期刊名，需与 Europe PMC 中的名称完全一致；# 开头为注释、空行忽略。
+# 下面是示例，请按需增删：
+Nature
+Bioinformatics
+Genome Biology
+Nucleic Acids Research
+"""
 
-DEFAULT_KEYWORDS_TXT = ""
+DEFAULT_KEYWORDS_TXT = """\
+# 每行一个 Europe PMC 检索式，支持布尔语法（AND/OR/NOT）与引号短语；# 开头为注释。
+# 下面是示例，请按需增删：
+(microbiome OR microbiota) AND "machine learning"
+"single cell" AND (deep learning OR neural network)
+"""
