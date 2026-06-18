@@ -12,18 +12,36 @@ struct PipelineStep: Identifiable, Equatable {
     let subtitle: String
     var status: StepStatus = .idle
     var detail: String = ""
+    var current: Int = 0
+    var total: Int = 0
+    var eta: String = ""
+    var progress: Double? { total > 0 ? min(1, Double(current) / Double(total)) : nil }
 }
 
-// 把引擎进度上报转发到界面日志（线程安全，回主线程更新）。
-final class UILogReporter: ProgressReporter {
-    private let append: (String) -> Void
-    init(_ append: @escaping (String) -> Void) { self.append = append }
-    func addTask(_ description: String, total: Int?) -> Int {
-        append(total.map { "\(description)（共 \($0)）" } ?? description); return 0
+// 把引擎进度上报转发到界面（日志 + 进度，回主线程更新）。
+final class UIReporter: ProgressReporter {
+    private let onLog: (String) -> Void
+    private let onProgress: (_ completed: Int, _ total: Int) -> Void
+    private var total = 0
+    private var completed = 0
+
+    init(onLog: @escaping (String) -> Void, onProgress: @escaping (Int, Int) -> Void) {
+        self.onLog = onLog
+        self.onProgress = onProgress
     }
-    func update(_ taskID: Int, advance: Int) {}
+    func addTask(_ description: String, total: Int?) -> Int {
+        self.total = total ?? 0
+        self.completed = 0
+        onLog(total.map { "\(description)（共 \($0)）" } ?? description)
+        onProgress(0, self.total)
+        return 0
+    }
+    func update(_ taskID: Int, advance: Int) {
+        completed += advance
+        onProgress(completed, total)
+    }
     func complete(_ taskID: Int) {}
-    func log(_ message: String) { append(message) }
+    func log(_ message: String) { onLog(message) }
 }
 
 final class AppState: ObservableObject {
@@ -177,18 +195,51 @@ final class AppState: ObservableObject {
         if logLines.count > 600 { logLines.removeFirst(logLines.count - 600) }
     }
 
+    private var currentStepID: String?
+    private var stepStartTime: Date?
+
     private func setStep(_ id: String, _ status: StepStatus, _ detail: String) {
         if let i = steps.firstIndex(where: { $0.id == id }) {
             steps[i].status = status
             steps[i].detail = detail
+            steps[i].current = 0
+            steps[i].total = 0
+            steps[i].eta = ""
         }
     }
 
     func resetSteps() {
-        for i in steps.indices { steps[i].status = .idle; steps[i].detail = "" }
+        for i in steps.indices { setStep(steps[i].id, .idle, "") }
     }
 
-    /// 按 id 顺序执行步骤，逐步更新每步状态；任一步失败则停止并标红。
+    private func startStep(_ id: String) {
+        currentStepID = id
+        stepStartTime = Date()
+        setStep(id, .running, "")
+    }
+
+    private func updateProgress(completed: Int, total: Int) {
+        guard let id = currentStepID, let i = steps.firstIndex(where: { $0.id == id }) else { return }
+        steps[i].current = completed
+        steps[i].total = total
+        if let start = stepStartTime, completed > 0, total > completed {
+            let elapsed = Date().timeIntervalSince(start)
+            let remaining = elapsed / Double(completed) * Double(total - completed)
+            steps[i].eta = AppState.formatETA(remaining)
+        } else {
+            steps[i].eta = ""
+        }
+    }
+
+    private static func formatETA(_ seconds: Double) -> String {
+        if seconds < 1 { return "" }
+        let s = Int(seconds.rounded())
+        if s < 60 { return "约 \(s) 秒" }
+        let m = s / 60, sec = s % 60
+        return sec == 0 ? "约 \(m) 分钟" : "约 \(m) 分 \(sec) 秒"
+    }
+
+    /// 按 id 顺序执行步骤，逐步更新每步状态与进度；任一步失败则停止并标红。
     func run(_ ids: [String]) {
         guard let ws = workspace, !isRunning else { return }
         let cfg = config
@@ -197,9 +248,12 @@ final class AppState: ObservableObject {
         logLines = []
         isRunning = true
         DispatchQueue.global().async {
-            let reporter = UILogReporter { line in DispatchQueue.main.async { self.appendLog(line) } }
+            let reporter = UIReporter(
+                onLog: { line in DispatchQueue.main.async { self.appendLog(line) } },
+                onProgress: { c, t in DispatchQueue.main.async { self.updateProgress(completed: c, total: t) } }
+            )
             for id in ids {
-                DispatchQueue.main.async { self.setStep(id, .running, "") }
+                DispatchQueue.main.async { self.startStep(id) }
                 do {
                     let result = try AppState.work(id: id, cfg: cfg, ws: ws, mode: mode, days: days, reporter: reporter)
                     DispatchQueue.main.async { self.setStep(id, .success, result) }
@@ -209,6 +263,7 @@ final class AppState: ObservableObject {
                 }
             }
             DispatchQueue.main.async {
+                self.currentStepID = nil
                 self.isRunning = false
                 self.refreshStats()
             }

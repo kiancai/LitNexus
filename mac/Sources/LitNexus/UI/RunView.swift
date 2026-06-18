@@ -90,6 +90,14 @@ struct StepRow: View {
                         .buttonStyle(OutlineButtonStyle()).controlSize(.small).disabled(app.isRunning)
                 }
                 Text(step.subtitle).font(.system(size: 11)).foregroundStyle(Theme.muted)
+                if step.status == .running, let p = step.progress {
+                    ProgressView(value: p).tint(Theme.accent).padding(.top, 4)
+                    HStack(spacing: 6) {
+                        Text("\(step.current) / \(step.total)（\(Int(p * 100))%）")
+                        if !step.eta.isEmpty { Text("· 预计剩余 \(step.eta)") }
+                    }
+                    .font(.system(size: 11)).foregroundStyle(Theme.muted)
+                }
                 if !step.detail.isEmpty {
                     Text(step.detail)
                         .font(.system(size: 12))

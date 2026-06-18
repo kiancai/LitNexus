@@ -94,6 +94,10 @@ enum SelfTest {
             check("merge inserted=1", mr.inserted == 1)
             check("merge skipped=1（dup pmid）", mr.skipped == 1)
             check("merge errors=1（缺 id）", mr.errors == 1)
+            check("已合并文件移入 _merged",
+                  FileManager.default.fileExists(atPath: ws.downloadsDir.appendingPathComponent("_merged/test.jsonl").path))
+            let mr2 = try Pipeline.mergeJSONL(db: dbv, downloadsDir: ws.downloadsDir, reporter: nil)
+            check("二次合并无新文件 files=0", mr2.files == 0)
 
             // CSV 导出 + 排除列 + BOM
             let csvOut = ws.exportsDir.appendingPathComponent("out.csv")

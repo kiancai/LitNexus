@@ -10,14 +10,17 @@ struct MergeResult {
 }
 
 enum Pipeline {
-    /// 合并 downloadsDir 下所有 *.jsonl 入库（去重）。
+    /// 合并 downloadsDir 下「尚未合并」的 *.jsonl 入库（去重）；合并后移入 _merged/，
+    /// 保证每个下载文件只处理一次，重复点击不会反复导入。
     static func mergeJSONL(db: Database, downloadsDir: URL, reporter: ProgressReporter?) throws -> MergeResult {
+        // 只看顶层 *.jsonl（_merged 是子目录，自然被排除）
         let files = ((try? FileManager.default.contentsOfDirectory(at: downloadsDir, includingPropertiesForKeys: nil)) ?? [])
             .filter { $0.pathExtension == "jsonl" }
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
 
+        let mergedDir = downloadsDir.appendingPathComponent("_merged")
         var inserted = 0, skipped = 0, errors = 0
-        let taskID = reporter?.addTask("合并 JSONL", total: files.count)
+        let taskID = reporter?.addTask("合并入库", total: files.count)
         for f in files {
             reporter?.log("处理：\(f.lastPathComponent)")
             var batch: [[String: DBValue]] = []
@@ -28,7 +31,12 @@ enum Pipeline {
             }
             let (i, s) = try db.insertArticles(batch)
             inserted += i; skipped += s; errors += fileErrors
-            reporter?.log("  \(f.lastPathComponent): 插入 \(i)，跳过 \(s)，错误 \(fileErrors)")
+            reporter?.log("  \(f.lastPathComponent): 插入 \(i)，重复 \(s)，错误 \(fileErrors)")
+            // 已合并的文件移入 _merged/，避免下次重复导入
+            try? FileManager.default.createDirectory(at: mergedDir, withIntermediateDirectories: true)
+            let dest = mergedDir.appendingPathComponent(f.lastPathComponent)
+            try? FileManager.default.removeItem(at: dest)
+            try? FileManager.default.moveItem(at: f, to: dest)
             if let taskID { reporter?.update(taskID, advance: 1) }
         }
         if let taskID { reporter?.complete(taskID) }
@@ -54,7 +62,8 @@ enum Pipeline {
     static func doMerge(config cfg: AppConfig, workspace ws: Workspace, reporter: ProgressReporter?) throws -> String {
         let db = try Database(path: ws.dbPath, config: cfg)
         let r = try mergeJSONL(db: db, downloadsDir: ws.downloadsDir, reporter: reporter)
-        return "插入 \(r.inserted)，重复 \(r.skipped)，错误 \(r.errors)"
+        if r.files == 0 { return "没有新的下载文件可合并" }
+        return "处理 \(r.files) 个文件：新增 \(r.inserted)，重复 \(r.skipped)，错误 \(r.errors)"
     }
 
     static func doTranslate(config cfg: AppConfig, workspace ws: Workspace, reporter: ProgressReporter?) throws -> String {
