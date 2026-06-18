@@ -1,0 +1,5 @@
+.build/
+LitNexus.app/
+*.xcodeproj
+.DS_Store
+.swiftpm/
