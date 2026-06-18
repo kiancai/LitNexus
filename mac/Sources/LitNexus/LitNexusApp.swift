@@ -12,6 +12,10 @@ struct EntryPoint {
             SelfTest.run()
             return
         }
+        if CommandLine.arguments.contains("epmctest") {
+            SelfTestLive.run()
+            return
+        }
         LitNexusApp.main()
     }
 }
