@@ -61,16 +61,19 @@ enum Identifier {
 
 // 运行期解析环境变量覆盖后的有效 AI 配置（不写回磁盘，避免密钥落盘）。
 extension AppConfig {
+    // 桌面应用：用户在界面填的值优先；环境变量只在对应字段留空时兜底
+    // （不同于 Python CLI 的「环境变量覆盖」语义，避免旧环境变量悄悄顶替用户输入）。
     var resolvedAI: AIConfig {
         let env = ProcessInfo.processInfo.environment
         var out = ai
-        out.apiKey = env["LITNEXUS_API_KEY"] ?? env["ARK_API_KEY"] ?? ai.apiKey
-        out.baseURL = env["LITNEXUS_BASE_URL"] ?? env["ARK_API_BASE_URL"] ?? ai.baseURL
+        if out.apiKey.isEmpty { out.apiKey = env["LITNEXUS_API_KEY"] ?? env["ARK_API_KEY"] ?? "" }
+        if out.baseURL.isEmpty { out.baseURL = env["LITNEXUS_BASE_URL"] ?? env["ARK_API_BASE_URL"] ?? "" }
         return out
     }
 
     var hasAPIKey: Bool {
+        if !ai.apiKey.isEmpty { return true }
         let env = ProcessInfo.processInfo.environment
-        return !(env["LITNEXUS_API_KEY"] ?? env["ARK_API_KEY"] ?? ai.apiKey).isEmpty
+        return !((env["LITNEXUS_API_KEY"] ?? env["ARK_API_KEY"]) ?? "").isEmpty
     }
 }
