@@ -4,7 +4,18 @@ import SwiftUI
 // 这是纯原生重写的骨架：界面用系统 AppKit/SwiftUI 渲染，逻辑后续逐步从
 // Python 参考实现（仓库 src/litnexus）1:1 移植过来。
 
+// 入口：带 `selftest` 参数时跑引擎自检（无界面环境下验证逻辑），否则启动 GUI。
 @main
+struct EntryPoint {
+    static func main() {
+        if CommandLine.arguments.contains("selftest") {
+            SelfTest.run()
+            return
+        }
+        LitNexusApp.main()
+    }
+}
+
 struct LitNexusApp: App {
     var body: some Scene {
         WindowGroup("LitNexus") {
