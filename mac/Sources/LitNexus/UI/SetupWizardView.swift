@@ -22,8 +22,8 @@ struct SetupWizardView: View {
 
             if step == 0 {
                 Card {
-                    SectionTitle("① 检索列表")
-                    Text("决定抓哪些文章。已预填示例，按需修改即可。")
+                    SectionTitle("第一步 · 检索列表")
+                    Text("用于确定抓取范围，已预填示例，可按需修改。")
                         .font(.system(size: 12)).foregroundStyle(Theme.muted)
                     fieldLabel("期刊（每行一个）")
                     editor($journals, height: 110)
@@ -36,8 +36,8 @@ struct SetupWizardView: View {
                 }
             } else {
                 Card {
-                    SectionTitle("② AI 接口")
-                    Text("翻译与分类需要一个 OpenAI 兼容接口。无默认值，请填你自己的。")
+                    SectionTitle("第二步 · AI 接口")
+                    Text("翻译与分类需要一个 OpenAI 兼容接口（无默认值，请填写你的服务商信息）。")
                         .font(.system(size: 12)).foregroundStyle(Theme.muted)
                     fieldLabel("Base URL")
                     input($baseURL)
@@ -53,12 +53,12 @@ struct SetupWizardView: View {
                             .buttonStyle(OutlineButtonStyle()).disabled(testing)
                         Spacer()
                         Button("上一步") { step = 0 }.buttonStyle(OutlineButtonStyle())
-                        Button("完成，开始使用") { finish() }.buttonStyle(PrimaryButtonStyle())
+                        Button("完成设置") { finish() }.buttonStyle(PrimaryButtonStyle())
                     }
                 }
             }
 
-            Button("跳过，直接进入") { app.route = .main }
+            Button("跳过") { app.route = .main }
                 .buttonStyle(.plain).font(.system(size: 12)).foregroundStyle(Theme.muted)
                 .frame(maxWidth: .infinity)
         }
@@ -93,7 +93,7 @@ struct SetupWizardView: View {
         Text(t).font(.system(size: 12, weight: .medium)).foregroundStyle(Theme.muted)
     }
     @ViewBuilder private func input(_ b: Binding<String>) -> some View {
-        TextField("", text: b).textFieldStyle(.plain)
+        TextField("", text: b).textFieldStyle(.plain).lineLimit(1)
             .padding(8).background(Theme.panel2).clipShape(RoundedRectangle(cornerRadius: 8))
     }
     @ViewBuilder private func editor(_ b: Binding<String>, height: CGFloat) -> some View {

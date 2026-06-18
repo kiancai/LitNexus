@@ -13,9 +13,22 @@ enum SelfTestAI {
         print("base=\(ai.baseURL) model=\(ai.model) 用的key前缀=\(ai.apiKey.prefix(6)) extra=\(ai.extraParams)")
         do {
             let content = try AIClient.chat(ai: ai, system: "你是助手", user: "只回复两个字：你好", temperature: 0.0)
-            print("✓ chat 成功，content=[\(content)] (len=\(content.count))")
+            print("✓ ping 成功，content=[\(content)] (len=\(content.count))")
         } catch {
-            print("✗ chat 失败：\(error)  ——  \((error as? HTTPError)?.errorDescription ?? "")")
+            print("✗ ping 失败：\(error)  ——  \((error as? HTTPError)?.errorDescription ?? "")")
+        }
+
+        // 批量翻译实测：打印原始返回 + 解析结果，定位「翻译全失败」
+        print("\n--- 批量翻译测试 ---")
+        let payload = [["id": 1, "title": "A deep learning framework for protein structure prediction"],
+                       ["id": 2, "title": "Single-cell RNA sequencing reveals immune dynamics"]]
+        let userMsg = String(data: (try? JSONSerialization.data(withJSONObject: payload)) ?? Data(), encoding: .utf8) ?? "[]"
+        do {
+            let raw = try AIClient.chat(ai: ai, system: AIClient.translateSystemPrompt, user: userMsg, temperature: 0.1)
+            print("原始返回：\(raw)")
+            print("解析结果：\(AIClient.parseBatchResponse(raw))")
+        } catch {
+            print("✗ 批量翻译 chat 失败：\(error)")
         }
         exit(0)
     }

@@ -159,7 +159,7 @@ struct SettingsView: View {
         Text(t).font(.system(size: 12, weight: .medium)).foregroundStyle(Theme.muted)
     }
     @ViewBuilder private func input(_ b: Binding<String>) -> some View {
-        TextField("", text: b).textFieldStyle(.plain)
+        TextField("", text: b).textFieldStyle(.plain).lineLimit(1)
             .padding(8).background(Theme.panel2).clipShape(RoundedRectangle(cornerRadius: 8))
     }
     @ViewBuilder private func editor(_ b: Binding<String>, height: CGFloat) -> some View {

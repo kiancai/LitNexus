@@ -17,7 +17,17 @@ enum AIClient {
         return URL(string: b + "/chat/completions")
     }
 
-    enum AIError: Error { case badEndpoint, noContent }
+    enum AIError: Error, LocalizedError {
+        case badEndpoint, noContent
+        case message(String)
+        var errorDescription: String? {
+            switch self {
+            case .badEndpoint: return "AI 接口地址无效"
+            case .noContent: return "AI 未返回内容"
+            case .message(let m): return m
+            }
+        }
+    }
 
     /// 单次对话补全，返回 content。429 限流按指数退避重试。
     static func chat(ai: AIConfig, system: String, user: String, temperature: Double) throws -> String {
@@ -104,7 +114,8 @@ enum AIClient {
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    static func translateBatch(ai: AIConfig, batch: [(epmcID: String, title: String)]) -> [(epmcID: String, titleZh: String?)] {
+    static func translateBatch(ai: AIConfig, batch: [(epmcID: String, title: String)])
+        -> (results: [(epmcID: String, titleZh: String?)], error: String?) {
         var idToEpmc: [Int: String] = [:]
         var payload: [[String: Any]] = []
         for (i, item) in batch.enumerated() {
@@ -120,7 +131,8 @@ enum AIClient {
         do {
             content = try chat(ai: ai, system: translateSystemPrompt, user: userMsg, temperature: 0.1)
         } catch {
-            return batch.map { ($0.epmcID, nil) }  // 整批失败：保持未翻译，下次重试
+            // 整批失败：保持未翻译、下次重试；同时把真实原因带出去
+            return (batch.map { ($0.epmcID, nil) }, (error as? LocalizedError)?.errorDescription ?? "\(error)")
         }
 
         let parsed = parseBatchResponse(content)
@@ -133,7 +145,7 @@ enum AIClient {
                 results.append((epmcID, translateSingle(ai: ai, title: titleByEpmc[epmcID] ?? "")))
             }
         }
-        return results
+        return (results, nil)
     }
 
     static func runTranslation(db: Database, config tcfg: TranslateConfig, ai: AIConfig,
@@ -153,10 +165,12 @@ enum AIClient {
         let lock = NSLock()
         var buffer: [(epmcID: String, titleZh: String?)] = []
         var translated = 0, failed = 0
+        var lastError: String?
 
         try concurrentForEach(batches, concurrency: tcfg.concurrency) { batch in
-            let res = translateBatch(ai: ai, batch: batch)
+            let (res, err) = translateBatch(ai: ai, batch: batch)
             lock.lock()
+            if let err, lastError == nil { lastError = err }
             buffer.append(contentsOf: res)
             for (_, tz) in res { if tz != nil { translated += 1 } else { failed += 1 } }
             if let taskID { reporter?.update(taskID, advance: 1) }
@@ -170,6 +184,10 @@ enum AIClient {
         }
         if !buffer.isEmpty { try db.updateTranslations(buffer) }
         if let taskID { reporter?.complete(taskID) }
+        // 全部失败视为硬错误，把真实原因抛给界面（而非静默显示「失败 N」）
+        if translated == 0, failed > 0 {
+            throw AIError.message("翻译全部失败（\(failed) 篇）：\(lastError ?? "未知错误")")
+        }
         return (translated, failed)
     }
 
@@ -207,19 +225,22 @@ enum AIClient {
     }
 
     static func classifyOne(ai: AIConfig, title: String, abstract: String, questions: [Question])
-        -> [String: (answer: String, reason: String)] {
+        -> (results: [String: (answer: String, reason: String)], error: String?) {
         if title.trimmingCharacters(in: .whitespaces).isEmpty
             && abstract.trimmingCharacters(in: .whitespaces).isEmpty {
             var out: [String: (String, String)] = [:]
             for q in questions { out[q.id] = ("N/A", "缺少标题和摘要") }
-            return out
+            return (out, nil)
         }
         let qText = questions.map { "【问题 \($0.id)】\($0.text)" }.joined(separator: "\n")
         let user = "【标题】\(title)\n【摘要】\(abstract)\n\n\(qText)"
-        guard let content = try? chat(ai: ai, system: buildSystemPrompt(questions), user: user, temperature: 0.0) else {
-            return [:]  // 失败不落库，保持 NULL 下次重试
+        do {
+            let content = try chat(ai: ai, system: buildSystemPrompt(questions), user: user, temperature: 0.0)
+            let r = parseClassifyResponse(content, questions: questions)
+            return r.isEmpty ? ([:], "解析结果为空") : (r, nil)
+        } catch {
+            return ([:], (error as? LocalizedError)?.errorDescription ?? "\(error)")  // 不落库，下次重试
         }
-        return parseClassifyResponse(content, questions: questions)
     }
 
     static func runClassification(db: Database, config ccfg: ClassifyConfig, ai: AIConfig,
@@ -234,12 +255,14 @@ enum AIClient {
         let lock = NSLock()
         var buffer: [(epmcID: String, results: [String: (answer: String, reason: String)])] = []
         var processed = 0, failed = 0
+        var lastError: String?
 
         try concurrentForEach(pending, concurrency: max(1, ccfg.maxWorkers)) { row in
-            let results = classifyOne(ai: ai, title: row.title, abstract: row.abstract, questions: questions)
+            let (results, err) = classifyOne(ai: ai, title: row.title, abstract: row.abstract, questions: questions)
             lock.lock()
             if results.isEmpty {
                 failed += 1
+                if let err, lastError == nil { lastError = err }
             } else {
                 buffer.append((row.epmcID, results)); processed += 1
             }
@@ -254,6 +277,9 @@ enum AIClient {
         }
         if !buffer.isEmpty { try db.writeClassification(buffer) }
         if let taskID { reporter?.complete(taskID) }
+        if processed == 0, failed > 0 {
+            throw AIError.message("分类全部失败（\(failed) 篇）：\(lastError ?? "未知错误")")
+        }
         return (processed, failed)
     }
 

@@ -4,6 +4,16 @@ import SwiftUI
 enum Route { case chooser, setup, main }
 enum Page: String, CaseIterable { case run = "运行", data = "数据", settings = "配置" }
 
+enum StepStatus { case idle, running, success, failed }
+
+struct PipelineStep: Identifiable, Equatable {
+    let id: String
+    let name: String
+    let subtitle: String
+    var status: StepStatus = .idle
+    var detail: String = ""
+}
+
 // 把引擎进度上报转发到界面日志（线程安全，回主线程更新）。
 final class UILogReporter: ProgressReporter {
     private let append: (String) -> Void
@@ -26,6 +36,15 @@ final class AppState: ObservableObject {
     @Published var stats: [String: Int] = [:]
     @Published var toast: String?
 
+    @Published var downloadMode = "all"
+    @Published var downloadDays = 30
+    @Published var steps: [PipelineStep] = [
+        PipelineStep(id: "download", name: "下载文献", subtitle: "从 Europe PMC 按期刊/关键词抓取"),
+        PipelineStep(id: "merge", name: "合并入库", subtitle: "解析并去重写入数据库"),
+        PipelineStep(id: "translate", name: "翻译标题", subtitle: "调用 AI 批量翻译标题"),
+        PipelineStep(id: "classify", name: "智能分类", subtitle: "调用 AI 按问题初筛"),
+    ]
+
     init() {
         if let ws = try? WorkspaceStore.resolve() {
             openExisting(ws)
@@ -45,6 +64,8 @@ final class AppState: ObservableObject {
             route = needsSetup ? .setup : .main
             page = .run
             logLines = []
+            downloadDays = config.download.days
+            resetSteps()
             refreshStats()
         } catch {
             toast = "无法打开项目：\(error.localizedDescription)"
@@ -55,6 +76,7 @@ final class AppState: ObservableObject {
         workspace = ws
         config = (try? ConfigStore.load(ws.configPath)) ?? AppConfig()
         route = needsSetup ? .setup : .main
+        downloadDays = config.download.days
         refreshStats()
     }
 
@@ -113,20 +135,34 @@ final class AppState: ObservableObject {
         if logLines.count > 600 { logLines.removeFirst(logLines.count - 600) }
     }
 
-    /// 在后台依次执行若干步骤；每步 work 接到 reporter，返回结果摘要。
-    func runSteps(_ steps: [(name: String, work: (AppConfig, Workspace, ProgressReporter) throws -> String)]) {
+    private func setStep(_ id: String, _ status: StepStatus, _ detail: String) {
+        if let i = steps.firstIndex(where: { $0.id == id }) {
+            steps[i].status = status
+            steps[i].detail = detail
+        }
+    }
+
+    func resetSteps() {
+        for i in steps.indices { steps[i].status = .idle; steps[i].detail = "" }
+    }
+
+    /// 按 id 顺序执行步骤，逐步更新每步状态；任一步失败则停止并标红。
+    func run(_ ids: [String]) {
         guard let ws = workspace, !isRunning else { return }
         let cfg = config
+        let mode = downloadMode, days = downloadDays
+        for id in ids { setStep(id, .idle, "") }
+        logLines = []
         isRunning = true
         DispatchQueue.global().async {
             let reporter = UILogReporter { line in DispatchQueue.main.async { self.appendLog(line) } }
-            for step in steps {
-                DispatchQueue.main.async { self.appendLog("▶ 开始：\(step.name)") }
+            for id in ids {
+                DispatchQueue.main.async { self.setStep(id, .running, "") }
                 do {
-                    let result = try step.work(cfg, ws, reporter)
-                    DispatchQueue.main.async { self.appendLog("✓ 完成：\(step.name)  \(result)") }
+                    let result = try AppState.work(id: id, cfg: cfg, ws: ws, mode: mode, days: days, reporter: reporter)
+                    DispatchQueue.main.async { self.setStep(id, .success, result) }
                 } catch {
-                    DispatchQueue.main.async { self.appendLog("✗ 失败：\(step.name)：\(error.localizedDescription)") }
+                    DispatchQueue.main.async { self.setStep(id, .failed, error.localizedDescription) }
                     break
                 }
             }
@@ -137,20 +173,18 @@ final class AppState: ObservableObject {
         }
     }
 
-    func runDownload(mode: String, days: Int) {
-        runSteps([("下载", { c, w, r in try Pipeline.doDownload(config: c, workspace: w, mode: mode, days: days, reporter: r) })])
-    }
-    func runMerge() { runSteps([("合并入库", { c, w, r in try Pipeline.doMerge(config: c, workspace: w, reporter: r) })]) }
-    func runTranslate() { runSteps([("翻译标题", { c, w, r in try Pipeline.doTranslate(config: c, workspace: w, reporter: r) })]) }
-    func runClassify() { runSteps([("AI 分类", { c, w, r in try Pipeline.doClassify(config: c, workspace: w, reporter: r) })]) }
+    func runAll() { run(["download", "merge", "translate", "classify"]) }
+    func runOne(_ id: String) { run([id]) }
 
-    func runAll(mode: String, days: Int) {
-        runSteps([
-            ("下载", { c, w, r in try Pipeline.doDownload(config: c, workspace: w, mode: mode, days: days, reporter: r) }),
-            ("合并入库", { c, w, r in try Pipeline.doMerge(config: c, workspace: w, reporter: r) }),
-            ("翻译标题", { c, w, r in try Pipeline.doTranslate(config: c, workspace: w, reporter: r) }),
-            ("AI 分类", { c, w, r in try Pipeline.doClassify(config: c, workspace: w, reporter: r) }),
-        ])
+    private static func work(id: String, cfg: AppConfig, ws: Workspace, mode: String, days: Int,
+                             reporter: ProgressReporter) throws -> String {
+        switch id {
+        case "download": return try Pipeline.doDownload(config: cfg, workspace: ws, mode: mode, days: days, reporter: reporter)
+        case "merge": return try Pipeline.doMerge(config: cfg, workspace: ws, reporter: reporter)
+        case "translate": return try Pipeline.doTranslate(config: cfg, workspace: ws, reporter: reporter)
+        case "classify": return try Pipeline.doClassify(config: cfg, workspace: ws, reporter: reporter)
+        default: return ""
+        }
     }
 
     // ── 导出 / 导入 ─────────────────────────────────────────────────────────────

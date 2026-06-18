@@ -16,7 +16,7 @@ struct ChooserView: View {
         VStack(spacing: 16) {
             Image(systemName: "testtube.2").font(.system(size: 48)).foregroundStyle(Theme.accent)
             Text("LitNexus").font(.system(size: 30, weight: .bold))
-            Text("选择一个项目文件夹——所有数据都集中在里面")
+            Text("选择一个项目文件夹，所有数据都保存在其中")
                 .font(.callout).foregroundStyle(Theme.muted)
 
             Card {
@@ -37,7 +37,7 @@ struct ChooserView: View {
                         app.openOrCreate(URL(fileURLWithPath: (path as NSString).expandingTildeInPath))
                     }.buttonStyle(PrimaryButtonStyle())
                 }
-                Text("文件夹已存在就打开，不存在就新建。")
+                Text("若文件夹已存在则打开，否则新建。")
                     .font(.system(size: 11)).foregroundStyle(Theme.muted)
 
                 let recent = WorkspaceStore.listRecent()

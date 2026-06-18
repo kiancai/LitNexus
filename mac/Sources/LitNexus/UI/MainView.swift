@@ -66,6 +66,7 @@ struct Sidebar: View {
             .padding(.horizontal, 10).padding(.vertical, 8)
             .background(active ? Theme.panel2 : Color.clear)
             .clipShape(RoundedRectangle(cornerRadius: 8))
+            .contentShape(Rectangle())  // 整行可点，而非仅文字/图标
         }
         .buttonStyle(.plain)
     }
