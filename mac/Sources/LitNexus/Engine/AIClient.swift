@@ -161,7 +161,7 @@ enum AIClient {
             i += tcfg.batchSize
         }
 
-        let taskID = reporter?.addTask("翻译标题", total: batches.count)
+        let taskID = reporter?.addTask("翻译标题", total: pending.count)
         let lock = NSLock()
         var buffer: [(epmcID: String, titleZh: String?)] = []
         var translated = 0, failed = 0
@@ -173,7 +173,7 @@ enum AIClient {
             if let err, lastError == nil { lastError = err }
             buffer.append(contentsOf: res)
             for (_, tz) in res { if tz != nil { translated += 1 } else { failed += 1 } }
-            if let taskID { reporter?.update(taskID, advance: 1) }
+            if let taskID { reporter?.update(taskID, advance: batch.count) }  // 按文章数推进
             if buffer.count >= 500 {
                 let flush = buffer; buffer.removeAll()
                 lock.unlock()

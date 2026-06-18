@@ -28,7 +28,6 @@ enum EPMCClient {
         var page = 1
         var total = 0
         var complete = true
-        var taskID: Int?
 
         while true {
             var comps = URLComponents(string: apiURL)!
@@ -68,7 +67,6 @@ enum EPMCClient {
             if page == 1 {
                 let hit = (payload["hitCount"] as? Int) ?? 0
                 reporter?.log("  找到 \(hit) 篇文章。")
-                taskID = reporter?.addTask(String(label.prefix(42)), total: hit)
             }
 
             for var article in results {
@@ -80,7 +78,6 @@ enum EPMCClient {
                 }
             }
             total += results.count
-            if let taskID { reporter?.update(taskID, advance: results.count) }
 
             let next = payload["nextCursorMark"] as? String
             if next == nil || next == cursorMark { break }
@@ -89,7 +86,6 @@ enum EPMCClient {
             Thread.sleep(forTimeInterval: cfg.requestDelay)
         }
 
-        if let taskID { reporter?.complete(taskID) }
         return (total, complete)
     }
 
@@ -104,52 +100,58 @@ enum EPMCClient {
         let ts = timestamp()
         var generated: [URL] = []
 
+        // 预先载入检索式，统计总数作为进度分母（进度按「检索式个数」推进）
+        let journals = (mode == "journals" || mode == "all") ? loadQueryFile(ws.journalsFile) : []
+        var keywordSets: [(file: URL, terms: [String])] = []
+        if mode == "keywords" || mode == "all" {
+            for kwFile in ws.keywordsFiles {
+                let terms = loadQueryFile(kwFile)
+                if !terms.isEmpty { keywordSets.append((kwFile, terms)) }
+            }
+        }
+        let totalQueries = journals.count + keywordSets.reduce(0) { $0 + $1.terms.count }
+        let taskID = reporter?.addTask("下载文献（按检索式）", total: totalQueries)
+
         func openFile(_ url: URL) throws -> FileHandle {
             FileManager.default.createFile(atPath: url.path, contents: nil)
             return try FileHandle(forWritingTo: url)
         }
 
-        if mode == "journals" || mode == "all" {
-            let journals = loadQueryFile(ws.journalsFile)
-            if !journals.isEmpty {
-                let out = ws.downloadsDir.appendingPathComponent("epmc_journals_\(ts).jsonl")
-                let fh = try openFile(out)
-                var totalCount = 0
-                for journal in journals {
-                    reporter?.log("\n--- 抓取期刊：\(journal) ---")
-                    let q = "JOURNAL:\"\(journal)\" AND \(dateQuery)"
-                    let (n, _) = fetchArticles(query: q, label: journal, cfg: cfg.download, fileHandle: fh, reporter: reporter)
-                    totalCount += n
-                }
-                try? fh.close()
-                reporter?.log("\n期刊下载完成，共 \(totalCount) 篇 → \(out.lastPathComponent)")
-                generated.append(out)
-            } else {
-                reporter?.log("期刊列表为空或文件不存在。")
+        if !journals.isEmpty {
+            let out = ws.downloadsDir.appendingPathComponent("epmc_journals_\(ts).jsonl")
+            let fh = try openFile(out)
+            var totalCount = 0
+            for journal in journals {
+                reporter?.log("\n--- 抓取期刊：\(journal) ---")
+                let q = "JOURNAL:\"\(journal)\" AND \(dateQuery)"
+                let (n, _) = fetchArticles(query: q, label: journal, cfg: cfg.download, fileHandle: fh, reporter: reporter)
+                totalCount += n
+                if let taskID { reporter?.update(taskID, advance: 1) }
             }
+            try? fh.close()
+            reporter?.log("\n期刊下载完成，共 \(totalCount) 篇 → \(out.lastPathComponent)")
+            generated.append(out)
         }
 
-        if mode == "keywords" || mode == "all" {
-            for kwFile in ws.keywordsFiles {
-                let terms = loadQueryFile(kwFile)
-                if terms.isEmpty { continue }
-                let stem = kwFile.deletingPathExtension().lastPathComponent
-                let out = ws.downloadsDir.appendingPathComponent("epmc_\(stem)_\(ts).jsonl")
-                let fh = try openFile(out)
-                var totalCount = 0
-                for term in terms {
-                    let label = term.count > 60 ? String(term.prefix(60)) + "..." : term
-                    reporter?.log("\n--- 抓取检索式：\(label) ---")
-                    let q = "(\(term)) AND \(dateQuery)"
-                    let (n, _) = fetchArticles(query: q, label: term, cfg: cfg.download, fileHandle: fh, reporter: reporter)
-                    totalCount += n
-                }
-                try? fh.close()
-                reporter?.log("\n关键词下载完成（\(kwFile.lastPathComponent)），共 \(totalCount) 篇 → \(out.lastPathComponent)")
-                generated.append(out)
+        for (kwFile, terms) in keywordSets {
+            let stem = kwFile.deletingPathExtension().lastPathComponent
+            let out = ws.downloadsDir.appendingPathComponent("epmc_\(stem)_\(ts).jsonl")
+            let fh = try openFile(out)
+            var totalCount = 0
+            for term in terms {
+                let label = term.count > 60 ? String(term.prefix(60)) + "..." : term
+                reporter?.log("\n--- 抓取检索式：\(label) ---")
+                let q = "(\(term)) AND \(dateQuery)"
+                let (n, _) = fetchArticles(query: q, label: term, cfg: cfg.download, fileHandle: fh, reporter: reporter)
+                totalCount += n
+                if let taskID { reporter?.update(taskID, advance: 1) }
             }
+            try? fh.close()
+            reporter?.log("\n关键词下载完成（\(kwFile.lastPathComponent)），共 \(totalCount) 篇 → \(out.lastPathComponent)")
+            generated.append(out)
         }
 
+        if let taskID { reporter?.complete(taskID) }
         return generated
     }
 
