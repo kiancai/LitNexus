@@ -51,8 +51,50 @@ final class AppState: ObservableObject {
         }
     }
 
-    var needsSetup: Bool { config.ai.baseURL.trimmingCharacters(in: .whitespaces).isEmpty
-        || config.ai.model.trimmingCharacters(in: .whitespaces).isEmpty }
+    var needsSetup: Bool { config.activeProfile?.isComplete != true }
+
+    // ── AI 方案管理（增删选立即持久化）─────────────────────────────────────────
+
+    @discardableResult
+    func addAIProfile() -> String {
+        let p = AIProfile(name: "方案 \(config.aiProfiles.count + 1)")
+        config.aiProfiles.append(p)
+        config.activeAIID = p.id
+        persistConfig()
+        return p.id
+    }
+
+    func updateAIProfile(_ profile: AIProfile) {
+        if let i = config.aiProfiles.firstIndex(where: { $0.id == profile.id }) {
+            config.aiProfiles[i] = profile
+            persistConfig()
+        }
+    }
+
+    func deleteAIProfile(_ id: String) {
+        config.aiProfiles.removeAll { $0.id == id }
+        if config.activeAIID == id { config.activeAIID = config.aiProfiles.first?.id ?? "" }
+        persistConfig()
+    }
+
+    func selectAIProfile(_ id: String) {
+        config.activeAIID = id
+        persistConfig()
+    }
+
+    func persistConfig() {
+        guard let ws = workspace else { return }
+        try? ConfigStore.save(config, to: ws.configPath)
+    }
+
+    /// 当前选中方案的可写绑定（编辑即写入内存并持久化）。
+    func activeProfileBinding() -> Binding<AIProfile>? {
+        guard let idx = config.aiProfiles.firstIndex(where: { $0.id == config.activeAIID }) else { return nil }
+        return Binding(
+            get: { self.config.aiProfiles[idx] },
+            set: { self.config.aiProfiles[idx] = $0; self.persistConfig() }
+        )
+    }
 
     // ── 工作区 ────────────────────────────────────────────────────────────────
 
@@ -94,6 +136,7 @@ final class AppState: ObservableObject {
 
     // ── 保存配置 + 检索列表 ─────────────────────────────────────────────────────
 
+    /// 自动保存设置与检索列表（静默，不弹提示）。保留 AI 方案不被覆盖由调用方负责。
     func saveConfig(_ cfg: AppConfig, journals: String, keywords: String) {
         guard let ws = workspace else { return }
         do {
@@ -102,7 +145,6 @@ final class AppState: ObservableObject {
             try ConfigStore.save(cfg, to: ws.configPath)
             _ = try Database(path: ws.dbPath, config: cfg)  // 补齐动态列
             config = cfg
-            toast = "配置已保存"
             refreshStats()
         } catch {
             toast = "保存失败：\(error.localizedDescription)"
@@ -217,20 +259,15 @@ final class AppState: ObservableObject {
     // ── 测试 AI 连接 ────────────────────────────────────────────────────────────
 
     func testAIConnection(_ ai: AIConfig, completion: @escaping (Bool, String) -> Void) {
-        let resolved = AppConfig(ai: ai).resolvedAI
-        guard !resolved.apiKey.isEmpty else { completion(false, "未填写 API Key"); return }
-        guard !resolved.baseURL.isEmpty, !resolved.model.isEmpty else { completion(false, "请先填写 Base URL 和模型名"); return }
+        guard !ai.apiKey.isEmpty else { completion(false, "请填写 API Key"); return }
+        guard !ai.baseURL.isEmpty, !ai.model.isEmpty else { completion(false, "请填写接口地址与模型名称"); return }
         DispatchQueue.global().async {
             do {
-                _ = try AIClient.chat(ai: resolved, system: "ping", user: "ping", temperature: 0)
+                _ = try AIClient.chat(ai: ai, system: "ping", user: "ping", temperature: 0)
                 DispatchQueue.main.async { completion(true, "连接成功") }
             } catch {
                 DispatchQueue.main.async { completion(false, "连接失败：\(error.localizedDescription)") }
             }
         }
     }
-}
-
-extension AppConfig {
-    init(ai: AIConfig) { self.init(); self.ai = ai }
 }

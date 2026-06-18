@@ -18,6 +18,20 @@ struct AIConfig: Equatable {
     var extraParams: String = ""
 }
 
+// 一个具名的 AI 配置方案。用户可保存多个，选其一作为当前使用。
+struct AIProfile: Identifiable, Equatable {
+    var id: String = UUID().uuidString
+    var name: String = "新方案"
+    var baseURL: String = ""
+    var model: String = ""
+    var apiKey: String = ""
+    var extraParams: String = ""
+
+    var asConfig: AIConfig { AIConfig(apiKey: apiKey, baseURL: baseURL, model: model, extraParams: extraParams) }
+    var isComplete: Bool { !baseURL.trimmingCharacters(in: .whitespaces).isEmpty
+        && !model.trimmingCharacters(in: .whitespaces).isEmpty }
+}
+
 struct TranslateConfig: Equatable {
     var batchSize: Int = 30
     var concurrency: Int = 20
@@ -44,11 +58,15 @@ struct ExportConfig: Equatable {
 
 struct AppConfig: Equatable {
     var download = DownloadConfig()
-    var ai = AIConfig()
+    var aiProfiles: [AIProfile] = []
+    var activeAIID: String = ""
     var translate = TranslateConfig()
     var classify = ClassifyConfig()
     var schema = SchemaConfig()
     var export = ExportConfig()
+
+    var activeProfile: AIProfile? { aiProfiles.first(where: { $0.id == activeAIID }) ?? aiProfiles.first }
+    var ai: AIConfig { activeProfile?.asConfig ?? AIConfig() }
 }
 
 // 合法 SQL 标识符（列名 / 列前缀），防止拼进 SQL 出错或注入。
@@ -61,19 +79,8 @@ enum Identifier {
 
 // 运行期解析环境变量覆盖后的有效 AI 配置（不写回磁盘，避免密钥落盘）。
 extension AppConfig {
-    // 桌面应用：用户在界面填的值优先；环境变量只在对应字段留空时兜底
-    // （不同于 Python CLI 的「环境变量覆盖」语义，避免旧环境变量悄悄顶替用户输入）。
-    var resolvedAI: AIConfig {
-        let env = ProcessInfo.processInfo.environment
-        var out = ai
-        if out.apiKey.isEmpty { out.apiKey = env["LITNEXUS_API_KEY"] ?? env["ARK_API_KEY"] ?? "" }
-        if out.baseURL.isEmpty { out.baseURL = env["LITNEXUS_BASE_URL"] ?? env["ARK_API_BASE_URL"] ?? "" }
-        return out
-    }
-
-    var hasAPIKey: Bool {
-        if !ai.apiKey.isEmpty { return true }
-        let env = ProcessInfo.processInfo.environment
-        return !((env["LITNEXUS_API_KEY"] ?? env["ARK_API_KEY"]) ?? "").isEmpty
-    }
+    // 桌面应用：完全以界面所选 AI 方案为准，不读取任何环境变量
+    // （避免旧环境变量悄悄顶替用户输入，这类行为在桌面端是反直觉的）。
+    var resolvedAI: AIConfig { ai }
+    var hasAPIKey: Bool { !ai.apiKey.isEmpty }
 }

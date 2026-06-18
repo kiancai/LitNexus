@@ -117,9 +117,9 @@ enum WorkspaceStore {
         return ws
     }
 
-    /// 在 root 创建工作区：建目录、写模板、设为活动。已存在的文件默认保留。
+    /// 在 root 创建工作区：建目录、写模板、（可选）设为活动。已存在的文件默认保留。
     @discardableResult
-    static func create(_ root: URL, force: Bool = false) throws -> Workspace {
+    static func create(_ root: URL, force: Bool = false, makeActive: Bool = true) throws -> Workspace {
         let ws = Workspace(root: root.standardizedFileURL)
         try FileManager.default.createDirectory(at: ws.root, withIntermediateDirectories: true)
         try ws.ensureDirs()
@@ -135,7 +135,7 @@ enum WorkspaceStore {
             try Templates.defaultKeywordsTxt.write(to: kwFile, atomically: true, encoding: .utf8)
         }
 
-        setActive(ws.root)
+        if makeActive { setActive(ws.root) }
         return ws
     }
 }

@@ -40,10 +40,32 @@ enum ConfigStore {
         }
 
         if let a = table["ai"]?.tomlValue.table {
-            cfg.ai.apiKey = a["api_key"]?.tomlValue.string ?? cfg.ai.apiKey
-            cfg.ai.baseURL = a["base_url"]?.tomlValue.string ?? cfg.ai.baseURL
-            cfg.ai.model = a["model"]?.tomlValue.string ?? cfg.ai.model
-            cfg.ai.extraParams = a["extra_params"]?.tomlValue.string ?? cfg.ai.extraParams
+            var profiles: [AIProfile] = []
+            if let arr = a["profiles"]?.tomlValue.array {
+                for item in arr {
+                    guard let t = item.tomlValue.table else { continue }
+                    var p = AIProfile()
+                    p.id = t["id"]?.tomlValue.string ?? p.id
+                    p.name = t["name"]?.tomlValue.string ?? p.name
+                    p.baseURL = t["base_url"]?.tomlValue.string ?? ""
+                    p.model = t["model"]?.tomlValue.string ?? ""
+                    p.apiKey = t["api_key"]?.tomlValue.string ?? ""
+                    p.extraParams = t["extra_params"]?.tomlValue.string ?? ""
+                    profiles.append(p)
+                }
+            }
+            // 旧格式迁移：无 profiles 但存在 base_url/model/api_key
+            if profiles.isEmpty {
+                let base = a["base_url"]?.tomlValue.string ?? ""
+                let model = a["model"]?.tomlValue.string ?? ""
+                let key = a["api_key"]?.tomlValue.string ?? ""
+                if !base.isEmpty || !model.isEmpty || !key.isEmpty {
+                    profiles = [AIProfile(name: "默认", baseURL: base, model: model, apiKey: key,
+                                          extraParams: a["extra_params"]?.tomlValue.string ?? "")]
+                }
+            }
+            cfg.aiProfiles = profiles
+            cfg.activeAIID = a["active"]?.tomlValue.string ?? profiles.first?.id ?? ""
         }
 
         if let t = table["translate"]?.tomlValue.table {
@@ -91,10 +113,19 @@ enum ConfigStore {
         root["download"] = download
 
         let ai = TOMLTable()
-        ai["api_key"] = cfg.ai.apiKey
-        ai["base_url"] = cfg.ai.baseURL
-        ai["model"] = cfg.ai.model
-        ai["extra_params"] = cfg.ai.extraParams
+        ai["active"] = cfg.activeAIID
+        let profiles = TOMLArray()
+        for p in cfg.aiProfiles {
+            let t = TOMLTable()
+            t["id"] = p.id
+            t["name"] = p.name
+            t["base_url"] = p.baseURL
+            t["model"] = p.model
+            t["api_key"] = p.apiKey
+            t["extra_params"] = p.extraParams
+            profiles.append(t)
+        }
+        ai["profiles"] = profiles
         root["ai"] = ai
 
         let translate = TOMLTable()

@@ -39,11 +39,11 @@ struct SetupWizardView: View {
                     SectionTitle("第二步 · AI 接口")
                     Text("翻译与分类需要一个 OpenAI 兼容接口（无默认值，请填写你的服务商信息）。")
                         .font(.system(size: 12)).foregroundStyle(Theme.muted)
-                    fieldLabel("Base URL")
+                    fieldLabel("接口地址（Base URL）")
                     input($baseURL)
-                    Text("填到 /v1 即可，例：https://api.xiaomimimo.com/v1（填完整的 /chat/completions 也认）")
+                    Text(verbatim: "接口地址通常以 /v1 结尾；也可填写完整的 /chat/completions 路径。")
                         .font(.system(size: 11)).foregroundStyle(Theme.muted)
-                    fieldLabel("模型名")
+                    fieldLabel("模型名称")
                     input($model)
                     fieldLabel("API Key")
                     SecureField("", text: $apiKey).textFieldStyle(.plain)
@@ -82,9 +82,12 @@ struct SetupWizardView: View {
 
     private func finish() {
         var cfg = app.config
-        cfg.ai = AIConfig(apiKey: apiKey.trimmingCharacters(in: .whitespaces),
-                          baseURL: baseURL.trimmingCharacters(in: .whitespaces),
-                          model: model.trimmingCharacters(in: .whitespaces))
+        let prof = AIProfile(name: "默认",
+                             baseURL: baseURL.trimmingCharacters(in: .whitespaces),
+                             model: model.trimmingCharacters(in: .whitespaces),
+                             apiKey: apiKey.trimmingCharacters(in: .whitespaces))
+        cfg.aiProfiles = [prof]
+        cfg.activeAIID = prof.id
         app.saveConfig(cfg, journals: journals, keywords: keywords)
         app.route = .main
     }

@@ -18,7 +18,7 @@ enum SelfTestLive {
         defer { try? FileManager.default.removeItem(at: tmp) }
         print("EPMC 实时验证 @ \(tmp.path)")
         do {
-            let ws = try WorkspaceStore.create(tmp)
+            let ws = try WorkspaceStore.create(tmp, makeActive: false)
             // 用一个小检索式 + 短时间窗，控制返回量
             try "Bioinformatics\n".write(to: ws.journalsFile, atomically: true, encoding: .utf8)
             var cfg = try ConfigStore.load(ws.configPath)

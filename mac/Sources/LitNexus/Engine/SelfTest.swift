@@ -14,12 +14,12 @@ enum SelfTest {
         let tmp = FileManager.default.temporaryDirectory
             .appendingPathComponent("litnexus_selftest_\(ProcessInfo.processInfo.processIdentifier)")
         try? FileManager.default.removeItem(at: tmp)
-        defer { try? FileManager.default.removeItem(at: tmp) }
+        func cleanup() { try? FileManager.default.removeItem(at: tmp) }
 
         print("LitNexus 引擎自检 @ \(tmp.path)")
         do {
-            // 工作区创建 + 模板
-            let ws = try WorkspaceStore.create(tmp)
+            // 工作区创建 + 模板（makeActive: false：不污染用户的活动工作区指针）
+            let ws = try WorkspaceStore.create(tmp, makeActive: false)
             check("工作区已初始化", ws.isInitialized)
             check("journals 模板含示例", (try? String(contentsOf: ws.journalsFile)).map { $0.contains("Nature") } ?? false)
             check("keywords 文件被识别", ws.keywordsFiles.contains { $0.lastPathComponent == "keywords.txt" })
@@ -30,8 +30,9 @@ enum SelfTest {
             check("AI 无默认值", cfg.ai.baseURL.isEmpty && cfg.ai.model.isEmpty)
             check("默认标注列 include/tags", cfg.schema.customColumns == ["include", "tags"])
 
-            cfg.ai.baseURL = "https://example.com/v1"
-            cfg.ai.model = "test-model"
+            let prof = AIProfile(name: "test", baseURL: "https://example.com/v1", model: "test-model")
+            cfg.aiProfiles = [prof]
+            cfg.activeAIID = prof.id
             cfg.download.days = 7
             try ConfigStore.save(cfg, to: ws.configPath)
             let reloaded = try ConfigStore.load(ws.configPath)
@@ -131,6 +132,7 @@ enum SelfTest {
             print("  ✗ 异常：\(error)")
         }
 
+        cleanup()
         print("\n结果：\(passed) 通过，\(failed) 失败")
         exit(failed == 0 ? 0 : 1)
     }
