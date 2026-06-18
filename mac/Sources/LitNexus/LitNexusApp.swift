@@ -12,6 +12,10 @@ struct EntryPoint {
             SelfTestLive.run()
             return
         }
+        if CommandLine.arguments.contains("aitest") {
+            SelfTestAI.run()
+            return
+        }
         LitNexusApp.main()
     }
 }

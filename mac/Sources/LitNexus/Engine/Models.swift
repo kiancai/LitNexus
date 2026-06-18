@@ -13,6 +13,9 @@ struct AIConfig: Equatable {
     var apiKey: String = ""
     var baseURL: String = ""
     var model: String = ""
+    /// 可选的额外请求参数（JSON 对象字符串），合并进每次请求体。
+    /// 用于各家不统一的开关，如关推理：{"enable_thinking": false} 或 {"reasoning_effort": "minimal"}。
+    var extraParams: String = ""
 }
 
 struct TranslateConfig: Equatable {

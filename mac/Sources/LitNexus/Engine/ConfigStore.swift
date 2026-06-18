@@ -43,6 +43,7 @@ enum ConfigStore {
             cfg.ai.apiKey = a["api_key"]?.tomlValue.string ?? cfg.ai.apiKey
             cfg.ai.baseURL = a["base_url"]?.tomlValue.string ?? cfg.ai.baseURL
             cfg.ai.model = a["model"]?.tomlValue.string ?? cfg.ai.model
+            cfg.ai.extraParams = a["extra_params"]?.tomlValue.string ?? cfg.ai.extraParams
         }
 
         if let t = table["translate"]?.tomlValue.table {
@@ -93,6 +94,7 @@ enum ConfigStore {
         ai["api_key"] = cfg.ai.apiKey
         ai["base_url"] = cfg.ai.baseURL
         ai["model"] = cfg.ai.model
+        ai["extra_params"] = cfg.ai.extraParams
         root["ai"] = ai
 
         let translate = TOMLTable()

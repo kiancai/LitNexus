@@ -8,6 +8,7 @@ struct SettingsView: View {
     @State private var baseURL = ""
     @State private var model = ""
     @State private var apiKey = ""
+    @State private var extraParams = ""
     @State private var questions: [Question] = []
     @State private var days = 30
     @State private var pageSize = 1000
@@ -37,13 +38,18 @@ struct SettingsView: View {
                 Card {
                     SectionTitle("AI 接口")
                     label("Base URL"); input($baseURL)
+                    Text("填到 /v1 即可，例：https://api.xiaomimimo.com/v1（填完整的 /chat/completions 也认）")
+                        .font(.system(size: 11)).foregroundStyle(Theme.muted)
                     label("模型名"); input($model)
                     label("API Key")
                     SecureField("", text: $apiKey).textFieldStyle(.plain)
                         .padding(8).background(Theme.panel2).clipShape(RoundedRectangle(cornerRadius: 8))
+                    label("额外请求参数（JSON，可选）"); input($extraParams)
+                    Text("留空即可。推理模型想关推理时，按你服务商的写法填，如 {\"enable_thinking\": false} 或 {\"reasoning_effort\": \"minimal\"}。")
+                        .font(.system(size: 11)).foregroundStyle(Theme.muted)
                     Button(testing ? "测试中…" : "测试连接") {
                         testing = true
-                        app.testAIConnection(AIConfig(apiKey: apiKey, baseURL: baseURL, model: model)) { _, m in
+                        app.testAIConnection(AIConfig(apiKey: apiKey, baseURL: baseURL, model: model, extraParams: extraParams)) { _, m in
                             testing = false; app.toast = m
                         }
                     }.buttonStyle(OutlineButtonStyle()).disabled(testing)
@@ -118,7 +124,7 @@ struct SettingsView: View {
         loaded = true
         let c = app.config
         journals = app.readJournals(); keywords = app.readKeywords()
-        baseURL = c.ai.baseURL; model = c.ai.model; apiKey = c.ai.apiKey
+        baseURL = c.ai.baseURL; model = c.ai.model; apiKey = c.ai.apiKey; extraParams = c.ai.extraParams
         questions = c.classify.questions
         days = c.download.days; pageSize = c.download.pageSize; requestDelay = c.download.requestDelay
         batchSize = c.translate.batchSize; concurrency = c.translate.concurrency; maxWorkers = c.classify.maxWorkers
@@ -131,7 +137,8 @@ struct SettingsView: View {
         var c = app.config
         c.ai = AIConfig(apiKey: apiKey.trimmingCharacters(in: .whitespaces),
                         baseURL: baseURL.trimmingCharacters(in: .whitespaces),
-                        model: model.trimmingCharacters(in: .whitespaces))
+                        model: model.trimmingCharacters(in: .whitespaces),
+                        extraParams: extraParams.trimmingCharacters(in: .whitespaces))
         c.classify.questions = questions
             .map { Question(id: $0.id.trimmingCharacters(in: .whitespaces), text: $0.text.trimmingCharacters(in: .whitespaces)) }
             .filter { !$0.id.isEmpty && Identifier.isValid($0.id) }

@@ -41,6 +41,8 @@ struct SetupWizardView: View {
                         .font(.system(size: 12)).foregroundStyle(Theme.muted)
                     fieldLabel("Base URL")
                     input($baseURL)
+                    Text("填到 /v1 即可，例：https://api.xiaomimimo.com/v1（填完整的 /chat/completions 也认）")
+                        .font(.system(size: 11)).foregroundStyle(Theme.muted)
                     fieldLabel("模型名")
                     input($model)
                     fieldLabel("API Key")

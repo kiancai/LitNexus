@@ -10,8 +10,10 @@ enum AIClient {
     static func backoff(_ attempt: Int) -> Double { min(backoffBase * pow(2.0, Double(attempt)), backoffCap) }
 
     private static func chatEndpoint(_ baseURL: String) -> URL? {
-        var b = baseURL
+        var b = baseURL.trimmingCharacters(in: .whitespaces)
         while b.hasSuffix("/") { b.removeLast() }
+        // 容错：用户填到 /v1 或填完整的 /chat/completions 都能认。
+        if b.hasSuffix("/chat/completions") { return URL(string: b) }
         return URL(string: b + "/chat/completions")
     }
 
@@ -20,11 +22,17 @@ enum AIClient {
     /// 单次对话补全，返回 content。429 限流按指数退避重试。
     static func chat(ai: AIConfig, system: String, user: String, temperature: Double) throws -> String {
         guard let endpoint = chatEndpoint(ai.baseURL) else { throw AIError.badEndpoint }
-        let body: [String: Any] = [
+        var body: [String: Any] = [
             "model": ai.model,
             "messages": [["role": "system", "content": system], ["role": "user", "content": user]],
             "temperature": temperature,
         ]
+        // 合并用户的额外参数（如关推理开关），用户写的键可覆盖默认值。
+        let trimmed = ai.extraParams.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty, let d = trimmed.data(using: .utf8),
+           let extra = try? JSONSerialization.jsonObject(with: d) as? [String: Any] {
+            for (k, v) in extra { body[k] = v }
+        }
         let data = try JSONSerialization.data(withJSONObject: body)
         let headers = ["Authorization": "Bearer \(ai.apiKey)"]
 
