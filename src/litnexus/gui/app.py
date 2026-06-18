@@ -1022,6 +1022,50 @@ def _page_settings() -> None:
 # ── 启动 ──────────────────────────────────────────────────────────────────────
 
 
+def _init_startup_logging() -> None:
+    """打包后的窗口版没有控制台，启动异常会无处可见。
+
+    把启动期日志写到用户主目录下的 litnexus-startup.log，便于排查「双击没反应」。
+    """
+    try:
+        handler = logging.FileHandler(Path.home() / "litnexus-startup.log", encoding="utf-8")
+    except OSError:
+        return
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+    root = logging.getLogger()
+    root.addHandler(handler)
+    if root.level > logging.INFO or root.level == logging.NOTSET:
+        root.setLevel(logging.INFO)
+
+
+def _webview2_runtime_present() -> bool:
+    """Windows：是否安装了 Edge WebView2 运行时（pywebview 原生窗口必需）。
+
+    非 Windows 直接 True（macOS 用系统 WebKit；Linux 由 webkit2gtk 提供）。
+    检测官方 EdgeUpdate 注册表项（HKLM 32/64 位与 HKCU 三处任一命中即视为已装）。
+    """
+    if sys.platform != "win32":
+        return True
+    try:
+        import winreg
+    except ImportError:
+        return False
+    client = "{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}"
+    for root_key, sub in (
+        (winreg.HKEY_LOCAL_MACHINE, rf"SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{client}"),
+        (winreg.HKEY_LOCAL_MACHINE, rf"SOFTWARE\Microsoft\EdgeUpdate\Clients\{client}"),
+        (winreg.HKEY_CURRENT_USER, rf"SOFTWARE\Microsoft\EdgeUpdate\Clients\{client}"),
+    ):
+        try:
+            with winreg.OpenKey(root_key, sub) as key:
+                pv, _ = winreg.QueryValueEx(key, "pv")
+                if pv and pv != "0.0.0.0":
+                    return True
+        except OSError:
+            continue
+    return False
+
+
 def launch(
     workspace: Path | None = None,
     *,
@@ -1031,9 +1075,12 @@ def launch(
 ) -> None:
     """启动 GUI。优先打开指定/活动工作区，否则进入项目选择页。
 
-    native=True 时尝试原生桌面窗口（pywebview）；若所在系统缺少 WebView 运行时
-    导致原生窗口起不来，会自动回退到浏览器模式，避免窗口版「双击没反应」。
+    native=True 时用原生桌面窗口（pywebview）。原生窗口在打包后由独立子进程渲染，
+    若系统缺少 WebView 运行时会静默失败、主进程却仍阻塞（无法靠 try/except 兜底），
+    因此这里在启动前**先探测**：探测不到 WebView2（Windows）就直接退回浏览器模式，
+    保证「双击至少能打开」。
     """
+    _init_startup_logging()
     try:
         ws = ws_mod.resolve_workspace(workspace)
         STATE.ws = ws
@@ -1048,11 +1095,21 @@ def launch(
         storage_secret="litnexus-gui",
     )
 
-    if native:
+    want_native = native
+    if native and not _webview2_runtime_present():
+        logger.warning(
+            "未检测到 WebView2 运行时，本次以浏览器模式打开。"
+            "安装 Microsoft Edge WebView2 运行时后，下次即可得到独立窗口。"
+        )
+        want_native = False
+
+    if want_native:
+        logger.info("以原生窗口模式启动 GUI。")
         try:
             ui.run(native=True, show=False, **common)
             return
-        except Exception:  # noqa: BLE001 —— 原生窗口失败（多为缺 WebView 运行时）→ 回退浏览器
-            logger.warning("原生窗口启动失败，回退浏览器模式打开。", exc_info=True)
+        except Exception:  # noqa: BLE001 —— 极少数原生启动同步异常，仍退回浏览器
+            logger.warning("原生窗口启动失败，回退浏览器模式。", exc_info=True)
 
+    logger.info("以浏览器模式启动 GUI（端口 %s）。", port)
     ui.run(native=False, show=show, **common)

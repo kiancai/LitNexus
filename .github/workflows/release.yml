@@ -58,6 +58,20 @@ jobs:
             ditto -c -k --keepParent "${{ matrix.app }}.app" "${{ matrix.app }}.app.zip"
             rm -rf "${{ matrix.app }}.app" "${{ matrix.app }}"
           elif [ "$RUNNER_OS" = "Windows" ]; then
+            # 原生独立窗口需要 Edge WebView2 运行时。附带官方安装器 + 说明，
+            # 缺运行时的机器装一次即可得到独立窗口（否则应用自动退回浏览器模式）。
+            curl -fL -o "${{ matrix.app }}/安装WebView2运行时.exe" \
+              "https://go.microsoft.com/fwlink/p/?LinkId=2124703" || true
+            printf '%s\r\n' \
+              'LitNexus 使用说明' \
+              '' \
+              '1. 双击 ${{ matrix.app }}.exe 启动。' \
+              '2. 若双击后没有出现独立窗口（多为系统缺少 WebView2 运行时），' \
+              '   应用会自动改用默认浏览器打开——同样可用。' \
+              '3. 想要「独立窗口」体验：先运行本文件夹内的「安装WebView2运行时.exe」，' \
+              '   安装完成后再启动 LitNexus 即可。' \
+              '4. 启动若有异常，日志在你的用户主目录下 litnexus-startup.log。' \
+              > "${{ matrix.app }}/请先读我.txt"
             7z a "${{ matrix.app }}.zip" "${{ matrix.app }}/"
             rm -rf "${{ matrix.app }}"
           else
