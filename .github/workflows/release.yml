@@ -36,7 +36,7 @@ jobs:
             '' \
             '升级：下载新版本 zip，解压后用新的 LitNexus.app 覆盖旧的即可。' \
             '你的数据存放在自己选择的「工作区」目录，与 App 分离，升级不会丢失。' \
-            > 'macOS-安装说明.txt'
+            > 'INSTALL-macOS.txt'
           ditto -c -k --keepParent LitNexus.app LitNexus-macos-arm64.zip
 
       - name: Create / update GitHub Release
@@ -44,6 +44,6 @@ jobs:
         with:
           files: |
             mac/LitNexus-macos-arm64.zip
-            mac/macOS-安装说明.txt
+            mac/INSTALL-macOS.txt
           generate_release_notes: true
           prerelease: ${{ contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') }}
