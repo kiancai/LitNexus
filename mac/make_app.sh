@@ -33,4 +33,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 </plist>
 PLIST
 
+# ad-hoc 签名整个 bundle（无需开发者证书）。把下载后的「已损坏」降级为可右键打开的
+# 「无法验证开发者」。彻底免提示仍需 Apple Developer ID 公证，个人项目暂不做。
+codesign --force --deep --sign - "$APP" 2>/dev/null || echo "（codesign 跳过：未找到 codesign）"
+
 echo "已生成 $(pwd)/$APP"
