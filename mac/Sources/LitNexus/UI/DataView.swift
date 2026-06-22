@@ -38,6 +38,20 @@ struct DataView: View {
                             Text("全部 (all)").tag("all")
                         }.frame(width: 240)
                     }
+                    Expander("选择导出列") {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(verbatim: "勾选要写入 CSV 的列。问题的答案/理由列由「配置 → 分类问题」里各自的「导出」开关控制。")
+                                .font(.system(size: 11)).foregroundStyle(Theme.muted)
+                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 8)], alignment: .leading, spacing: 6) {
+                                ForEach(app.exportableColumns(), id: \.col) { item in
+                                    Toggle(item.label, isOn: Binding(
+                                        get: { !app.config.export.excludeColumns.contains(item.col) },
+                                        set: { app.setColumnExported(item.col, $0) }
+                                    )).toggleStyle(.checkbox).font(.system(size: 12))
+                                }
+                            }
+                        }
+                    }
                     HStack(spacing: 8) {
                         Button("导出 CSV") { app.export(filter: filter) }
                             .buttonStyle(PrimaryButtonStyle()).disabled(app.stats["total"] == nil)
@@ -65,6 +79,7 @@ struct DataView: View {
             app.refreshStats()
         }
         .sheet(isPresented: $showClear) { clearSheet }
+        .sheet(item: $app.importPlan) { plan in ImportMappingSheet(plan: plan) }
     }
 
     private var databaseCard: some View {
@@ -78,13 +93,13 @@ struct DataView: View {
                     if let dest = FolderPicker.saveDB(defaultName: name) { app.exportDatabase(to: dest) }
                 }.buttonStyle(PrimaryButtonStyle())
                 Button("导入数据库（跳过已有）") {
-                    if let src = FolderPicker.pickDB() { app.importDatabase(from: src, strategy: .skipExisting) }
+                    if let src = FolderPicker.pickDB() { app.beginImport(from: src, strategy: .skipExisting) }
                 }.buttonStyle(OutlineButtonStyle())
             }
-            Text(verbatim: "导入默认跳过已有文章、不覆盖你的翻译与分类，且导入前自动备份为 .db.bak。")
+            Text(verbatim: "导入默认跳过已有文章、不覆盖你的翻译与分类，且导入前自动备份为 .db.bak。若源库含分类问题，会先让你手动对齐。")
                 .font(.system(size: 11)).foregroundStyle(Theme.muted)
             Button("高级导入：仅填补空缺字段…") {
-                if let src = FolderPicker.pickDB() { app.importDatabase(from: src, strategy: .fillEmpty) }
+                if let src = FolderPicker.pickDB() { app.beginImport(from: src, strategy: .fillEmpty) }
             }
             .buttonStyle(.plain).font(.system(size: 12)).foregroundStyle(Theme.accent)
             .help("已有文章保留，只把当前为空的字段用导入值补上")
@@ -135,6 +150,58 @@ struct DataView: View {
         if let v = app.stats["reviewed_yes"] { items.append(("已收 yes", v, Theme.green)) }
         if let v = app.stats["reviewed_no"] { items.append(("已弃 no", v, Theme.muted)) }
         return items.map { (label: $0.0, value: $0.1, color: $0.2) }
+    }
+}
+
+// 导入数据库时，把源库的问题列人工对齐到当前问题（或新建/不导入）。
+struct ImportMappingSheet: View {
+    @EnvironmentObject var app: AppState
+    @State var plan: ImportPlan
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("导入对齐").font(.system(size: 16, weight: .bold))
+            Text(verbatim: "源库共 \(plan.total) 篇。文献本体与人工标注（include/tags）会自动合并；下面的分类问题请逐个选择如何对齐——这一步不会默认对齐，避免把含义不同的问题列合到一起。")
+                .font(.system(size: 12)).foregroundStyle(Theme.muted).fixedSize(horizontal: false, vertical: true)
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach($plan.rows) { $row in rowView($row) }
+                }
+            }
+            .frame(maxHeight: 320)
+
+            HStack {
+                Spacer()
+                Button("取消") { app.importPlan = nil }.buttonStyle(OutlineButtonStyle())
+                Button("开始导入") { app.confirmImport(plan) }.buttonStyle(PrimaryButtonStyle())
+            }
+        }
+        .padding(24).frame(width: 580).background(Theme.panel)
+    }
+
+    @ViewBuilder private func rowView(_ row: Binding<ImportQRow>) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(verbatim: "源库问题：\(row.wrappedValue.label)").font(.system(size: 13, weight: .medium))
+            if let t = row.wrappedValue.srcText, !t.isEmpty {
+                Text(t).font(.system(size: 11)).foregroundStyle(Theme.muted).lineLimit(2)
+            } else {
+                Text(verbatim: "（源库未自描述问题文本，标识 \(row.wrappedValue.srcId)）")
+                    .font(.system(size: 11)).foregroundStyle(Theme.amber)
+            }
+            Picker("", selection: row.action) {
+                ForEach(app.config.classify.questions) { q in
+                    Text(verbatim: "对应到：\(q.displayName)").tag(QMapAction.map(q.id))
+                }
+                Text("新建为独立的一列").tag(QMapAction.createNew)
+                Text("不导入这一列").tag(QMapAction.skip)
+            }
+            .labelsHidden().frame(maxWidth: 320)
+        }
+        .padding(12)
+        .background(Theme.panel2.opacity(0.5))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.line, lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }
 

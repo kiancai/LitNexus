@@ -7,6 +7,9 @@ struct DownloadConfig: Equatable {
     var days: Int = 30
     var pageSize: Int = 1000
     var requestDelay: Double = 0.5
+    // 期刊与关键词检索式现统一存进配置（数组，每元素一行，含注释行）。下载时过滤 # 与空行。
+    var journals: [String] = Templates.defaultJournalLines
+    var keywords: [String] = Templates.defaultKeywordLines
 }
 
 struct AIConfig: Equatable {
@@ -71,7 +74,8 @@ struct SchemaConfig: Equatable {
 
 struct ExportConfig: Equatable {
     var filter: String = "pending"
-    var excludeColumns: [String] = ["journal_info_json", "keyword_list_json", "abstract_zh"]
+    // 默认仅排除两个体积大、人不读的 JSON 列；摘要译文等默认导出。可在「导出列」界面调整。
+    var excludeColumns: [String] = ["journal_info_json", "keyword_list_json"]
 }
 
 struct AppConfig: Equatable {

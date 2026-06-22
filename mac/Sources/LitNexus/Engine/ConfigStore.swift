@@ -37,6 +37,26 @@ enum ConfigStore {
             cfg.download.requestDelay = d["request_delay"]?.tomlValue.double
                 ?? d["request_delay"]?.tomlValue.int.map(Double.init)
                 ?? cfg.download.requestDelay
+            if let arr = d["journals"]?.tomlValue.array {
+                cfg.download.journals = arr.compactMap { $0.tomlValue.string }
+            }
+            if let arr = d["keywords"]?.tomlValue.array {
+                cfg.download.keywords = arr.compactMap { $0.tomlValue.string }
+            }
+        }
+        // 旧项目迁移：toml 里没有 journals/keywords 时，从同目录的 journals.txt / keywords.txt(+keywords/) 读入。
+        let hasJournalsKey = (table["download"]?.tomlValue.table?["journals"]) != nil
+        let hasKeywordsKey = (table["download"]?.tomlValue.table?["keywords"]) != nil
+        if !hasJournalsKey || !hasKeywordsKey {
+            let ws = Workspace(root: path.deletingLastPathComponent())
+            if !hasJournalsKey, let txt = try? String(contentsOf: ws.journalsFile, encoding: .utf8) {
+                cfg.download.journals = txt.components(separatedBy: "\n")
+            }
+            if !hasKeywordsKey {
+                let lines = ws.keywordsFiles.compactMap { try? String(contentsOf: $0, encoding: .utf8) }
+                    .flatMap { $0.components(separatedBy: "\n") }
+                if !lines.isEmpty { cfg.download.keywords = lines }
+            }
         }
 
         if let a = table["ai"]?.tomlValue.table {
@@ -117,6 +137,12 @@ enum ConfigStore {
         download["days"] = cfg.download.days
         download["page_size"] = cfg.download.pageSize
         download["request_delay"] = cfg.download.requestDelay
+        let journalsArr = TOMLArray()
+        for j in cfg.download.journals { journalsArr.append(j) }
+        download["journals"] = journalsArr
+        let keywordsArr = TOMLArray()
+        for k in cfg.download.keywords { keywordsArr.append(k) }
+        download["keywords"] = keywordsArr
         root["download"] = download
 
         let ai = TOMLTable()

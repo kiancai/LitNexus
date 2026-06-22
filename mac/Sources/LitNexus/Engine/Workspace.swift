@@ -124,15 +124,9 @@ enum WorkspaceStore {
         try FileManager.default.createDirectory(at: ws.root, withIntermediateDirectories: true)
         try ws.ensureDirs()
 
+        // 期刊/关键词默认值已并入 AppConfig（写进 litnexus.toml），不再单独写 .txt。
         if force || !FileManager.default.fileExists(atPath: ws.configPath.path) {
             try ConfigStore.save(AppConfig(), to: ws.configPath)
-        }
-        if force || !FileManager.default.fileExists(atPath: ws.journalsFile.path) {
-            try Templates.defaultJournalsTxt.write(to: ws.journalsFile, atomically: true, encoding: .utf8)
-        }
-        let kwFile = ws.root.appendingPathComponent("keywords.txt")
-        if force || !FileManager.default.fileExists(atPath: kwFile.path) {
-            try Templates.defaultKeywordsTxt.write(to: kwFile, atomically: true, encoding: .utf8)
         }
 
         if makeActive { setActive(ws.root) }

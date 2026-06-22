@@ -250,7 +250,7 @@ struct AIProfilesCard: View {
                     .padding(8).background(Theme.panel2).clipShape(RoundedRectangle(cornerRadius: 8))
             }
             field("额外请求参数（JSON，可选）", p.extraParams)
-            Text(verbatim: "用于服务商各自不同的开关，例如关闭推理：{\"enable_thinking\": false} 或 {\"reasoning_effort\": \"minimal\"}。")
+            Text(verbatim: "用于服务商各自不同的开关。关闭推理示例：MiMo 用 {\"thinking\": {\"type\": \"disabled\"}}；通义/Qwen 用 {\"enable_thinking\": false}；部分 OpenAI 兼容用 {\"reasoning_effort\": \"minimal\"}。写错的键会被服务器忽略，不报错。")
                 .font(.system(size: 11)).foregroundStyle(Theme.muted)
 
             Button(testing ? "测试中…" : "测试连接") {

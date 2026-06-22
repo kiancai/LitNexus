@@ -191,6 +191,17 @@ final class Database {
         for q in cfg.classify.questions where existing.contains("\(q.id)_ans") {
             try exec("CREATE INDEX IF NOT EXISTS idx_\(q.id)_ans ON articles(\(q.id)_ans)")
         }
+        try writeQuestionMeta(cfg.classify.questions)
+    }
+
+    /// 把问题定义写进库内 litnexus_questions 表，使 .db 自描述（导入时可按文本对齐）。
+    func writeQuestionMeta(_ questions: [Question]) throws {
+        try exec("CREATE TABLE IF NOT EXISTS litnexus_questions (id TEXT PRIMARY KEY, nickname TEXT, text TEXT)")
+        try exec("DELETE FROM litnexus_questions")
+        for q in questions {
+            _ = try run("INSERT INTO litnexus_questions (id, nickname, text) VALUES (?, ?, ?)",
+                        [.text(q.id), .text(q.nickname), .text(q.text)])
+        }
     }
 
     // ── 插入（INSERT OR IGNORE 去重）──────────────────────────────────────────
@@ -383,38 +394,75 @@ final class Database {
         case fillEmpty      // 已有行：仅把当前为 NULL 的字段用源值补上；其余保留。再插入全新行
     }
 
-    /// 从另一份 .db 导入文章。按列名大小写不敏感取交集，兼容旧库（旧列 `Include` 自动对应
-    /// 新列 `include`，多出的 JSON 列自动忽略）。返回 (新增, 既有跳过/被补, 源库总数)。
+    /// 源库的问题信息（用于导入前的人工对齐）。text/nickname 仅当源库自带 litnexus_questions 表时可知。
+    struct SourceQuestionInfo { let id: String; let nickname: String?; let text: String? }
+    struct ImportInspection { let sourceQuestions: [SourceQuestionInfo]; let total: Int }
+
+    /// 检查源 .db：列出它的问题列（及自描述文本，若有）与总行数，供 UI 做对齐。
+    func inspectImport(_ source: URL) throws -> ImportInspection {
+        _ = try run("ATTACH DATABASE ? AS src", [.text(source.path)])
+        defer { try? exec("DETACH DATABASE src") }
+        guard try !query("SELECT name FROM src.sqlite_master WHERE type='table' AND name='articles'").rows.isEmpty else {
+            throw DBError.sql("源数据库中没有 articles 表，无法导入。")
+        }
+        let srcCols = try query("PRAGMA src.table_info(articles)").rows.compactMap { $0["name"]?.stringValue }
+        let qids = srcCols.filter { $0.hasSuffix("_ans") }.map { String($0.dropLast(4)) }
+
+        var meta: [String: (String?, String?)] = [:]
+        if try !query("SELECT name FROM src.sqlite_master WHERE type='table' AND name='litnexus_questions'").rows.isEmpty {
+            for row in try query("SELECT id, nickname, text FROM src.litnexus_questions").rows {
+                if let id = row["id"]?.stringValue { meta[id] = (row["nickname"]?.stringValue, row["text"]?.stringValue) }
+            }
+        }
+        let questions = qids.map { SourceQuestionInfo(id: $0, nickname: meta[$0]?.0, text: meta[$0]?.1) }
+        let total = try scalarInt("SELECT COUNT(*) FROM src.articles")
+        return ImportInspection(sourceQuestions: questions, total: total)
+    }
+
+    /// 从另一份 .db 导入：通用列（非问题列）按列名自动对齐；问题列按 questionColumnPairs 显式映射。
+    /// questionColumnPairs 为空表示不导入任何问题列。返回 (新增, 既有, 源库总数)。
     @discardableResult
-    func importFromDatabase(_ source: URL, strategy: ImportStrategy = .skipExisting)
+    func importFromDatabase(_ source: URL, strategy: ImportStrategy = .skipExisting,
+                            questionColumnPairs: [(dest: String, src: String)]? = nil)
         throws -> (inserted: Int, skipped: Int, total: Int) {
         _ = try run("ATTACH DATABASE ? AS src", [.text(source.path)])
         defer { try? exec("DETACH DATABASE src") }
-
         guard try !query("SELECT name FROM src.sqlite_master WHERE type='table' AND name='articles'").rows.isEmpty else {
             throw DBError.sql("源数据库中没有 articles 表，无法导入。")
         }
         let srcCols = try query("PRAGMA src.table_info(articles)").rows.compactMap { $0["name"]?.stringValue }
         let dstCols = try existingColumns()
         let srcLower = Set(srcCols.map { $0.lowercased() })
-        // 以目标列名为准（SQLite 列名大小写不敏感，旧库 Include 能命中新列 include）
-        let common = dstCols.filter { srcLower.contains($0.lowercased()) }
-        guard !common.isEmpty else { throw DBError.sql("源库与当前库没有可对应的列。") }
-        guard common.contains("epmc_id") else { throw DBError.sql("源库缺少 epmc_id 主键，无法导入。") }
+        func isQ(_ c: String) -> Bool { c.hasSuffix("_ans") || c.hasSuffix("_rea") }
+
+        // 通用列：两边都有、且不是问题列。questionColumnPairs == nil 表示「全自动对齐」(含问题列，供迁移工具用)。
+        let universal: [(dest: String, src: String)]
+        if questionColumnPairs == nil {
+            universal = dstCols.filter { srcLower.contains($0.lowercased()) }.map { (dest: $0, src: $0) }
+        } else {
+            universal = dstCols.filter { !isQ($0) && srcLower.contains($0.lowercased()) }.map { (dest: $0, src: $0) }
+        }
+        var pairs = universal + (questionColumnPairs ?? [])
+        guard pairs.contains(where: { $0.dest.lowercased() == "epmc_id" }) else {
+            throw DBError.sql("源库缺少 epmc_id 主键，无法导入。")
+        }
+        // 去重（避免某列既在通用又在映射里）
+        var seen = Set<String>()
+        pairs = pairs.filter { seen.insert($0.dest.lowercased()).inserted }
 
         let total = try scalarInt("SELECT COUNT(*) FROM src.articles")
         let before = try scalarInt("SELECT COUNT(*) FROM main.articles")
-        let colList = common.joined(separator: ", ")
 
         if strategy == .fillEmpty {
-            // 先按主键补齐已有行的空字段（COALESCE 保留现有非空值），再插入全新行。
-            let setClause = common.filter { $0 != "epmc_id" }
-                .map { "\($0) = COALESCE(m.\($0), s.\($0))" }.joined(separator: ", ")
+            let setClause = pairs.filter { $0.dest.lowercased() != "epmc_id" }
+                .map { "\($0.dest) = COALESCE(m.\($0.dest), s.\($0.src))" }.joined(separator: ", ")
             if !setClause.isEmpty {
                 try exec("UPDATE main.articles AS m SET \(setClause) FROM src.articles AS s WHERE s.epmc_id = m.epmc_id")
             }
         }
-        try exec("INSERT OR IGNORE INTO main.articles (\(colList)) SELECT \(colList) FROM src.articles")
+        let destList = pairs.map { $0.dest }.joined(separator: ", ")
+        let srcList = pairs.map { $0.src }.joined(separator: ", ")
+        try exec("INSERT OR IGNORE INTO main.articles (\(destList)) SELECT \(srcList) FROM src.articles")
         let after = try scalarInt("SELECT COUNT(*) FROM main.articles")
         let inserted = after - before
         return (inserted, total - inserted, total)

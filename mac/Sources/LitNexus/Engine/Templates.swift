@@ -26,6 +26,20 @@ enum Templates {
         ),
     ]
 
+    // 期刊/关键词现统一存进 litnexus.toml（[download].journals / .keywords 数组）。
+    // 下面是新项目的默认行（含注释行，下载时会跳过 # 和空行）。
+    static let defaultJournalLines = [
+        "# 每行一个期刊名，需与 Europe PMC 中的名称完全一致；# 开头为注释、空行忽略。",
+        "# 下面是示例，请按需增删：",
+        "Nature", "Bioinformatics", "Genome Biology", "Nucleic Acids Research",
+    ]
+    static let defaultKeywordLines = [
+        "# 每行一个 Europe PMC 检索式，支持布尔语法（AND/OR/NOT）与引号短语；# 开头为注释。",
+        "# 下面是示例，请按需增删：",
+        "(microbiome OR microbiota) AND \"machine learning\"",
+        "\"single cell\" AND (deep learning OR neural network)",
+    ]
+
     static let defaultJournalsTxt = """
     # 每行一个期刊名，需与 Europe PMC 中的名称完全一致；# 开头为注释、空行忽略。
     # 下面是示例，请按需增删：

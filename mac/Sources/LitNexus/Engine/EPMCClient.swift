@@ -17,8 +17,12 @@ enum EPMCClient {
 
     static func loadQueryFile(_ path: URL) -> [String] {
         guard let content = try? String(contentsOf: path, encoding: .utf8) else { return [] }
-        return content.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty && !$0.hasPrefix("#") }
+        return filterQueries(content.components(separatedBy: "\n"))
+    }
+
+    /// 过滤掉注释行（# 开头）与空行，去首尾空白。
+    static func filterQueries(_ lines: [String]) -> [String] {
+        lines.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty && !$0.hasPrefix("#") }
     }
 
     /// 对单个 query 分页抓取，写入 fileHandle（JSONL）。返回 (总数, 是否完整)。
@@ -100,16 +104,10 @@ enum EPMCClient {
         let ts = timestamp()
         var generated: [URL] = []
 
-        // 预先载入检索式，统计总数作为进度分母（进度按「检索式个数」推进）
-        let journals = (mode == "journals" || mode == "all") ? loadQueryFile(ws.journalsFile) : []
-        var keywordSets: [(file: URL, terms: [String])] = []
-        if mode == "keywords" || mode == "all" {
-            for kwFile in ws.keywordsFiles {
-                let terms = loadQueryFile(kwFile)
-                if !terms.isEmpty { keywordSets.append((kwFile, terms)) }
-            }
-        }
-        let totalQueries = journals.count + keywordSets.reduce(0) { $0 + $1.terms.count }
+        // 检索式现从配置读取（已统一进 litnexus.toml）。进度按「检索式个数」推进。
+        let journals = (mode == "journals" || mode == "all") ? filterQueries(cfg.download.journals) : []
+        let keywordTerms = (mode == "keywords" || mode == "all") ? filterQueries(cfg.download.keywords) : []
+        let totalQueries = journals.count + keywordTerms.count
         let taskID = reporter?.addTask("下载文献（按检索式）", total: totalQueries)
 
         func openFile(_ url: URL) throws -> FileHandle {
@@ -117,7 +115,7 @@ enum EPMCClient {
             return try FileHandle(forWritingTo: url)
         }
 
-        let totalKeywords = keywordSets.reduce(0) { $0 + $1.terms.count }
+        let totalKeywords = keywordTerms.count
 
         if !journals.isEmpty {
             let out = ws.downloadsDir.appendingPathComponent("epmc_journals_\(ts).jsonl")
@@ -137,28 +135,23 @@ enum EPMCClient {
             generated.append(out)
         }
 
-        var kwDone = 0
-        for (kwFile, terms) in keywordSets {
-            let stem = kwFile.deletingPathExtension().lastPathComponent
-            let out = ws.downloadsDir.appendingPathComponent("epmc_\(stem)_\(ts).jsonl")
+        if !keywordTerms.isEmpty {
+            let out = ws.downloadsDir.appendingPathComponent("epmc_keywords_\(ts).jsonl")
             let fh = try openFile(out)
             var totalCount = 0
-            for term in terms {
+            for (idx, term) in keywordTerms.enumerated() {
                 let label = term.count > 50 ? String(term.prefix(50)) + "…" : term
-                reporter?.subProgress(key: "keywords", label: "关键词", current: kwDone, total: totalKeywords, item: label)
+                reporter?.subProgress(key: "keywords", label: "关键词", current: idx, total: totalKeywords, item: label)
                 reporter?.log("\n--- 抓取检索式：\(label) ---")
                 let q = "(\(term)) AND \(dateQuery)"
                 let (n, _) = fetchArticles(query: q, label: term, cfg: cfg.download, fileHandle: fh, reporter: reporter)
                 totalCount += n
-                kwDone += 1
                 if let taskID { reporter?.update(taskID, advance: 1) }
             }
-            try? fh.close()
-            reporter?.log("\n关键词下载完成（\(kwFile.lastPathComponent)），共 \(totalCount) 篇 → \(out.lastPathComponent)")
-            generated.append(out)
-        }
-        if totalKeywords > 0 {
             reporter?.subProgress(key: "keywords", label: "关键词", current: totalKeywords, total: totalKeywords, item: "完成")
+            try? fh.close()
+            reporter?.log("\n关键词下载完成，共 \(totalCount) 篇 → \(out.lastPathComponent)")
+            generated.append(out)
         }
 
         if let taskID { reporter?.complete(taskID) }

@@ -21,11 +21,11 @@ enum SelfTest {
             // 工作区创建 + 模板（makeActive: false：不污染用户的活动工作区指针）
             let ws = try WorkspaceStore.create(tmp, makeActive: false)
             check("工作区已初始化", ws.isInitialized)
-            check("journals 模板含示例", (try? String(contentsOf: ws.journalsFile)).map { $0.contains("Nature") } ?? false)
-            check("keywords 文件被识别", ws.keywordsFiles.contains { $0.lastPathComponent == "keywords.txt" })
 
             // 配置默认值 + 往返
             var cfg = try ConfigStore.load(ws.configPath)
+            check("默认期刊（toml）含示例", cfg.download.journals.contains("Nature"))
+            check("默认关键词（toml）非空", cfg.download.keywords.contains { $0.contains("microbiome") })
             check("默认两个问题", cfg.classify.questions.map(\.id) == ["q1", "q2"])
             check("AI 无默认值", cfg.ai.baseURL.isEmpty && cfg.ai.model.isEmpty)
             check("默认标注列 include/tags", cfg.schema.customColumns == ["include", "tags"])
@@ -34,10 +34,15 @@ enum SelfTest {
             cfg.aiProfiles = [prof]
             cfg.activeAIID = prof.id
             cfg.download.days = 7
+            cfg.download.journals = ["Nature", "# 注释", "Cell"]
+            cfg.download.keywords = ["(a OR b) AND \"c d\""]
             try ConfigStore.save(cfg, to: ws.configPath)
             let reloaded = try ConfigStore.load(ws.configPath)
             check("配置往返：base_url", reloaded.ai.baseURL == "https://example.com/v1")
             check("配置往返：days", reloaded.download.days == 7)
+            check("配置往返：journals 数组", reloaded.download.journals == ["Nature", "# 注释", "Cell"])
+            check("配置往返：keywords 含引号检索式", reloaded.download.keywords == ["(a OR b) AND \"c d\""])
+            check("检索式过滤注释/空行", EPMCClient.filterQueries(reloaded.download.journals) == ["Nature", "Cell"])
             check("配置往返：问题保留", reloaded.classify.questions.map(\.id) == ["q1", "q2"])
             check("配置往返：昵称保留", reloaded.classify.questions.first?.nickname == "生物医学领域")
             check("默认翻译摘要为开", reloaded.translate.translateAbstract)
@@ -151,6 +156,25 @@ enum SelfTest {
             check("整库导入源库计数=1", srcTotal == 1)
             let afterImport = try dbv.stats(questions: cfg.classify.questions)["total"] ?? 0
             check("整库导入后 total +1", afterImport == beforeImport + 1)
+
+            // 导入对齐：源库自描述 + 把源 q1 映射到目标 q2
+            let mapCfg = try ConfigStore.load(ws.configPath)
+            let srcMPath = tmp.appendingPathComponent("srcM.db")
+            let srcM = try Database(path: srcMPath, config: mapCfg)
+            _ = try srcM.insertArticles([[
+                "epmc_id": .text("MX"), "pmid": .text("7001"), "title": .text("t"), "pub_year": .int(2024)]])
+            try srcM.writeClassification([("MX", ["q1": (answer: "是", reason: "r")])])
+            let destM = try Database(path: tmp.appendingPathComponent("destM.db"), config: mapCfg)
+            let inspM = try destM.inspectImport(srcMPath)
+            check("inspect 源问题数=2", inspM.sourceQuestions.count == 2)
+            check("inspect 源问题自描述文本", inspM.sourceQuestions.contains { $0.text?.contains("计算生物学") == true })
+            let (insM, _, _) = try destM.importFromDatabase(
+                srcMPath, strategy: .skipExisting,
+                questionColumnPairs: [(dest: "q2_ans", src: "q1_ans"), (dest: "q2_rea", src: "q1_rea")])
+            check("映射导入新增 1", insM == 1)
+            let mrow = try destM.query("SELECT q1_ans, q2_ans FROM articles WHERE epmc_id='MX'").rows.first
+            check("源 q1 答案落到目标 q2", mrow?["q2_ans"]?.stringValue == "是")
+            check("目标 q1 未被写入", mrow?["q1_ans"]?.stringValue == nil)
 
             // 复筛 CSV 导回（include 小写归一）
             let reviewCSV = "\u{FEFF}epmc_id,include,tags\r\nE1,YES,important\r\nM1,no,\r\n"
