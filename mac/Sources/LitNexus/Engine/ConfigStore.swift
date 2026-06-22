@@ -71,6 +71,8 @@ enum ConfigStore {
         if let t = table["translate"]?.tomlValue.table {
             cfg.translate.batchSize = t["batch_size"]?.tomlValue.int ?? cfg.translate.batchSize
             cfg.translate.concurrency = t["concurrency"]?.tomlValue.int ?? cfg.translate.concurrency
+            cfg.translate.translateAbstract = t["translate_abstract"]?.tomlValue.bool ?? cfg.translate.translateAbstract
+            cfg.translate.abstractBatchSize = t["abstract_batch_size"]?.tomlValue.int ?? cfg.translate.abstractBatchSize
         }
 
         if let c = table["classify"]?.tomlValue.table {
@@ -81,7 +83,12 @@ enum ConfigStore {
                     if let qt = item.tomlValue.table,
                        let id = qt["id"]?.tomlValue.string,
                        let text = qt["text"]?.tomlValue.string {
-                        questions.append(Question(id: id, text: text))
+                        questions.append(Question(
+                            id: id,
+                            nickname: qt["nickname"]?.tomlValue.string ?? "",
+                            text: text,
+                            classify: qt["classify"]?.tomlValue.bool ?? true,
+                            export: qt["export"]?.tomlValue.bool ?? true))
                     }
                 }
                 cfg.classify.questions = questions
@@ -131,6 +138,8 @@ enum ConfigStore {
         let translate = TOMLTable()
         translate["batch_size"] = cfg.translate.batchSize
         translate["concurrency"] = cfg.translate.concurrency
+        translate["translate_abstract"] = cfg.translate.translateAbstract
+        translate["abstract_batch_size"] = cfg.translate.abstractBatchSize
         root["translate"] = translate
 
         let classify = TOMLTable()
@@ -139,7 +148,10 @@ enum ConfigStore {
         for q in cfg.classify.questions {
             let qt = TOMLTable()
             qt["id"] = q.id
+            qt["nickname"] = q.nickname
             qt["text"] = q.text
+            qt["classify"] = q.classify
+            qt["export"] = q.export
             questions.append(qt)
         }
         classify["questions"] = questions

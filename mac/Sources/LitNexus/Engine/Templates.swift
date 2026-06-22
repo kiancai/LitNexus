@@ -6,6 +6,7 @@ enum Templates {
     static let defaultQuestions: [Question] = [
         Question(
             id: "q1",
+            nickname: "生物医学领域",
             text: """
             请判断本文是否属于'计算生物学、生物信息学、生物医学'或相关交叉领域。\
             若文章属于以下任一类型，请回答'是'：(1) 涉及组学数据（基因/蛋白/代谢等）的分析或实验研究；\
@@ -16,6 +17,7 @@ enum Templates {
         ),
         Question(
             id: "q2",
+            nickname: "核心方向",
             text: """
             请判断本文是否属于以下任一核心关注领域（命中任意一项即回答'是'）：\
             (a) 微生物组学（Microbiome）；(b) 生物基础模型与生成式AI；(c) 生物医学机器学习应用；\

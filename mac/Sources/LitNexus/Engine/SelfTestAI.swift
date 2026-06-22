@@ -19,13 +19,14 @@ enum SelfTestAI {
 
         // 批量翻译实测：打印原始返回 + 解析结果，定位「翻译全失败」
         print("\n--- 批量翻译测试 ---")
-        let payload = [["id": 1, "title": "A deep learning framework for protein structure prediction"],
-                       ["id": 2, "title": "Single-cell RNA sequencing reveals immune dynamics"]]
+        let payload = [["id": 1, "text": "A deep learning framework for protein structure prediction"],
+                       ["id": 2, "text": "Single-cell RNA sequencing reveals immune dynamics"]]
         let userMsg = String(data: (try? JSONSerialization.data(withJSONObject: payload)) ?? Data(), encoding: .utf8) ?? "[]"
         do {
-            let raw = try AIClient.chat(ai: ai, system: AIClient.translateSystemPrompt, user: userMsg, temperature: 0.1)
+            let raw = try AIClient.chat(ai: ai, system: AIClient.translateSystemPrompt("title"), user: userMsg, temperature: 0.1)
             print("原始返回：\(raw)")
-            print("解析结果：\(AIClient.parseBatchResponse(raw))")
+            let parsed = AIClient.parseBatchResponse(raw, valueKey: "text_zh")
+            print("解析结果：\(parsed)")
         } catch {
             print("✗ 批量翻译 chat 失败：\(error)")
         }

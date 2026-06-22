@@ -5,7 +5,6 @@ struct SettingsView: View {
 
     @State private var journals = ""
     @State private var keywords = ""
-    @State private var questions: [Question] = []
     @State private var days = 30
     @State private var pageSize = 1000
     @State private var requestDelay = 0.5
@@ -32,29 +31,10 @@ struct SettingsView: View {
 
                 AIProfilesCard()
 
-                Card {
-                    SectionTitle("分类问题")
-                    ForEach(questions.indices, id: \.self) { i in
-                        VStack(alignment: .leading, spacing: 6) {
-                            HStack {
-                                TextField("列名标识", text: $questions[i].id).textFieldStyle(.plain).lineLimit(1)
-                                    .frame(width: 120).padding(6)
-                                    .background(Theme.panel2).clipShape(RoundedRectangle(cornerRadius: 6))
-                                Spacer()
-                                Button { questions.remove(at: i) } label: { Image(systemName: "trash") }
-                                    .buttonStyle(.plain).foregroundStyle(Theme.red)
-                            }
-                            editor($questions[i].text, height: 80)
-                        }
-                        .padding(10).background(Theme.panel2.opacity(0.5))
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                    }
-                    Button("添加问题") { questions.append(Question(id: "q\(questions.count + 1)", text: "")) }
-                        .buttonStyle(OutlineButtonStyle())
-                }
+                QuestionsCard()
 
                 Card {
-                    DisclosureGroup("高级参数") {
+                    Expander("高级参数") {
                         VStack(alignment: .leading, spacing: 10) {
                             numberRow("下载最近天数", $days)
                             numberRow("每页数量", $pageSize)
@@ -65,12 +45,12 @@ struct SettingsView: View {
                             label("默认导出范围"); input($exportFilter)
                             label("导出排除列（逗号分隔）"); input($excludeColumns)
                             label("人工标注列（逗号分隔）"); input($customColumns)
-                        }.padding(.top, 8)
-                    }.tint(Theme.fg)
+                        }
+                    }
                 }
 
                 Card {
-                    DisclosureGroup("项目位置") {
+                    Expander("项目位置") {
                         if let ws = app.workspace {
                             VStack(alignment: .leading, spacing: 6) {
                                 pathRow("配置文件", ws.configPath)
@@ -81,9 +61,9 @@ struct SettingsView: View {
                                     Button("切换项目") { persist(); app.switchProject() }.buttonStyle(OutlineButtonStyle())
                                     Button("打开项目目录") { revealInFinder(ws.root) }.buttonStyle(OutlineButtonStyle())
                                 }.padding(.top, 4)
-                            }.padding(.top, 8)
+                            }
                         }
-                    }.tint(Theme.fg)
+                    }
                 }
             }
             .padding(28)
@@ -97,7 +77,6 @@ struct SettingsView: View {
         loaded = true
         let c = app.config
         journals = app.readJournals(); keywords = app.readKeywords()
-        questions = c.classify.questions
         days = c.download.days; pageSize = c.download.pageSize; requestDelay = c.download.requestDelay
         batchSize = c.translate.batchSize; concurrency = c.translate.concurrency; maxWorkers = c.classify.maxWorkers
         exportFilter = c.export.filter
@@ -108,10 +87,7 @@ struct SettingsView: View {
     // 自动保存非 AI 设置（AI 方案由各自的增删选/编辑即时持久化，此处从 app.config 继承不覆盖）。
     private func persist() {
         guard loaded else { return }
-        var c = app.config
-        c.classify.questions = questions
-            .map { Question(id: $0.id.trimmingCharacters(in: .whitespaces), text: $0.text.trimmingCharacters(in: .whitespaces)) }
-            .filter { !$0.id.isEmpty && Identifier.isValid($0.id) }
+        var c = app.config   // 分类问题由 QuestionsCard 即时持久化，这里不覆盖
         c.download.days = days; c.download.pageSize = pageSize; c.download.requestDelay = requestDelay
         c.translate.batchSize = batchSize; c.translate.concurrency = concurrency; c.classify.maxWorkers = maxWorkers
         c.export.filter = exportFilter.trimmingCharacters(in: .whitespaces).isEmpty ? "pending" : exportFilter
@@ -157,6 +133,63 @@ struct SettingsView: View {
             Text(url.path).font(.system(size: 11, design: .monospaced)).foregroundStyle(Theme.fg)
                 .textSelection(.enabled).lineLimit(1).truncationMode(.middle)
         }
+    }
+}
+
+// ── 分类问题卡片：每个问题独立配置（昵称 / 完整问题 / AI处理 / 导出 / 永久删除）──
+
+struct QuestionsCard: View {
+    @EnvironmentObject var app: AppState
+    @State private var pendingDelete: Question?
+
+    var body: some View {
+        Card {
+            SectionTitle("分类问题")
+            Text(verbatim: "每个问题独立配置。「AI 处理」决定是否让 AI 跑这个问题；「导出」决定是否写入导出的 CSV；昵称用作导出表头。")
+                .font(.system(size: 12)).foregroundStyle(Theme.muted)
+
+            ForEach(app.config.classify.questions) { q in
+                if let binding = app.questionBinding(q.id) { editor(binding) }
+            }
+
+            Button("添加问题") { app.addQuestion() }.buttonStyle(OutlineButtonStyle())
+        }
+        .alert("彻底删除这个问题？", isPresented: Binding(
+            get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } })) {
+            Button("取消", role: .cancel) { pendingDelete = nil }
+            Button("删除问题及全部答案", role: .destructive) {
+                if let q = pendingDelete { app.deleteQuestionPermanently(q.id) }
+                pendingDelete = nil
+            }
+        } message: {
+            Text(verbatim: "将连同该问题已有的全部答案与理由一并永久删除，无法恢复。若只是暂时不想用，请改为关闭「AI 处理」。")
+        }
+    }
+
+    @ViewBuilder private func editor(_ q: Binding<Question>) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                TextField("昵称（导出表头）", text: q.nickname).textFieldStyle(.plain).lineLimit(1)
+                    .padding(7).background(Theme.panel2).clipShape(RoundedRectangle(cornerRadius: 6))
+                    .frame(maxWidth: 220)
+                Spacer()
+                Text(verbatim: "标识 \(q.wrappedValue.id)").font(.system(size: 10)).foregroundStyle(Theme.muted)
+                Button { pendingDelete = q.wrappedValue } label: { Image(systemName: "trash") }
+                    .buttonStyle(.plain).foregroundStyle(Theme.red).help("永久删除该问题及其数据")
+            }
+            TextEditor(text: q.text)
+                .font(.system(size: 12, design: .monospaced)).scrollContentBackground(.hidden)
+                .padding(6).frame(height: 80)
+                .background(Theme.panel2).clipShape(RoundedRectangle(cornerRadius: 8))
+            HStack(spacing: 18) {
+                Toggle("AI 处理", isOn: q.classify).toggleStyle(.checkbox)
+                Toggle("导出到 CSV", isOn: q.export).toggleStyle(.checkbox)
+            }.font(.system(size: 12)).foregroundStyle(Theme.fg)
+        }
+        .padding(12)
+        .background(Theme.panel2.opacity(0.5))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.line, lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }
 

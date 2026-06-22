@@ -1,105 +1,49 @@
 name: Release
 
+# 原生 Mac 版发布：打 tag（v*）即在 macOS runner 上用 SPM 构建 .app、跑引擎自检、
+# 打包 zip 并创建 GitHub Release。Windows 原生版暂缓，待 Mac 定型后再加 job。
 on:
   push:
     tags:
       - "v*"
 
 jobs:
-  build-binaries:
-    strategy:
-      matrix:
-        include:
-          - os: ubuntu-latest
-            app: LitNexus-linux-x86_64
-          # macOS Intel（macos-13）已弃用：GitHub 正逐步下线 Intel runner（排队极慢），
-          # 且 Apple 已全面转向 Apple Silicon。只构建 arm64 版。
-          - os: macos-latest
-            app: LitNexus-macos-arm64
-          - os: windows-latest
-            app: LitNexus-windows-x86_64
-
-    runs-on: ${{ matrix.os }}
-
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: astral-sh/setup-uv@v8.2.0
-        with:
-          python-version: "3.12"
-
-      # Linux 的原生窗口（pywebview）依赖系统 WebKitGTK，构建机需先装好。
-      - name: Install Linux GUI runtime deps
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-0 libgtk-3-0
-
-      - name: Install dependencies
-        run: uv sync --extra dev --extra desktop
-
-      # 只打 GUI 窗口版：双击即用的桌面应用（pywebview 原生窗口，无终端窗口）。
-      # 不再打 CLI 控制台版（命令行用户用 `uv tool install` 即可）。
-      # 统一用 --onedir：onefile 每次启动都要解压并触发系统安全扫描，onedir 仅首跑扫描一次。
-      - name: Build GUI app (windowed)
-        shell: bash
-        run: |
-          uv run pyinstaller \
-            --onedir \
-            --windowed \
-            --name ${{ matrix.app }} \
-            --collect-all litnexus \
-            --collect-all nicegui \
-            --collect-all webview \
-            --hidden-import pydantic_core \
-            src/litnexus/cli/app.py
-          cd dist
-          if [ "$RUNNER_OS" = "macOS" ]; then
-            ditto -c -k --keepParent "${{ matrix.app }}.app" "${{ matrix.app }}.app.zip"
-            rm -rf "${{ matrix.app }}.app" "${{ matrix.app }}"
-          elif [ "$RUNNER_OS" = "Windows" ]; then
-            # 原生独立窗口需要 Edge WebView2 运行时。附带官方安装器 + 说明，
-            # 缺运行时的机器装一次即可得到独立窗口（否则应用自动退回浏览器模式）。
-            curl -fL -o "${{ matrix.app }}/安装WebView2运行时.exe" \
-              "https://go.microsoft.com/fwlink/p/?LinkId=2124703" || true
-            printf '%s\r\n' \
-              'LitNexus 使用说明' \
-              '' \
-              '1. 双击 ${{ matrix.app }}.exe 启动。' \
-              '2. 若双击后没有出现独立窗口（多为系统缺少 WebView2 运行时），' \
-              '   应用会自动改用默认浏览器打开——同样可用。' \
-              '3. 想要「独立窗口」体验：先运行本文件夹内的「安装WebView2运行时.exe」，' \
-              '   安装完成后再启动 LitNexus 即可。' \
-              '4. 启动若有异常，日志在你的用户主目录下 litnexus-startup.log。' \
-              > "${{ matrix.app }}/请先读我.txt"
-            7z a "${{ matrix.app }}.zip" "${{ matrix.app }}/"
-            rm -rf "${{ matrix.app }}"
-          else
-            tar -czf "${{ matrix.app }}.tar.gz" "${{ matrix.app }}"
-            rm -rf "${{ matrix.app }}"
-          fi
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: ${{ matrix.app }}
-          path: dist/*
-
-  create-release:
-    needs: build-binaries
-    runs-on: ubuntu-latest
+  build-mac:
+    runs-on: macos-latest
     permissions:
       contents: write
 
     steps:
-      - uses: actions/download-artifact@v8
-        with:
-          path: dist/
-          merge-multiple: true
+      - uses: actions/checkout@v6
 
-      - name: Create GitHub Release
+      - name: Build native .app (SPM, release)
+        working-directory: mac
+        run: ./make_app.sh release
+
+      - name: Engine selftest (gate)
+        working-directory: mac
+        run: ./LitNexus.app/Contents/MacOS/LitNexus selftest
+
+      - name: Package zip + install note
+        working-directory: mac
+        run: |
+          printf '%s\n' \
+            'LitNexus for macOS（Apple Silicon / arm64）' \
+            '' \
+            '本应用未经 Apple 公证签名（个人项目，无开发者账号），首次打开需手动放行：' \
+            '  方式一：右键点击 LitNexus.app →「打开」→ 在弹窗里再次点「打开」。' \
+            '  方式二：终端执行  xattr -dr com.apple.quarantine /拖入/LitNexus.app' \
+            '' \
+            '升级：下载新版本 zip，解压后用新的 LitNexus.app 覆盖旧的即可。' \
+            '你的数据存放在自己选择的「工作区」目录，与 App 分离，升级不会丢失。' \
+            > 'macOS-安装说明.txt'
+          ditto -c -k --keepParent LitNexus.app LitNexus-macos-arm64.zip
+
+      - name: Create / update GitHub Release
         uses: softprops/action-gh-release@v3
         with:
-          files: dist/**
+          files: |
+            mac/LitNexus-macos-arm64.zip
+            mac/macOS-安装说明.txt
           generate_release_notes: true
           prerelease: ${{ contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') }}

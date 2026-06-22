@@ -16,6 +16,11 @@ struct EntryPoint {
             SelfTestAI.run()
             return
         }
+        if let i = CommandLine.arguments.firstIndex(of: "migrate"),
+           CommandLine.arguments.count > i + 2 {
+            MigrateTool.run(oldDB: CommandLine.arguments[i + 1], outDB: CommandLine.arguments[i + 2])
+            return
+        }
         LitNexusApp.main()
     }
 }

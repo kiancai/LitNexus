@@ -49,6 +49,39 @@ struct SectionTitle: View {
     }
 }
 
+// 整行可点的折叠区（替代 DisclosureGroup 只能点小箭头的问题）。
+struct Expander<Content: View>: View {
+    let title: String
+    @State private var expanded: Bool
+    @ViewBuilder var content: Content
+
+    init(_ title: String, expanded: Bool = false, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self._expanded = State(initialValue: expanded)
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.15)) { expanded.toggle() }
+            } label: {
+                HStack {
+                    Text(title).font(.system(size: 14, weight: .medium)).foregroundStyle(Theme.fg)
+                    Spacer()
+                    Image(systemName: "chevron.right").font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Theme.muted)
+                        .rotationEffect(.degrees(expanded ? 90 : 0))
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain).focusable(false)
+
+            if expanded { content.padding(.top, 12) }
+        }
+    }
+}
+
 // 主操作按钮（靓蓝填充）。
 struct PrimaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {

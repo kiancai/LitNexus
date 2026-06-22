@@ -44,11 +44,24 @@ enum Pipeline {
     }
 
     /// 按 filterMode 导出到 CSV，返回行数（0 表示结果为空）。
+    /// 问题列：导出开=用昵称作表头；导出关=整列排除。
     @discardableResult
     static func exportArticles(db: Database, config cfg: AppConfig, filterMode: String, output: URL) throws -> Int {
         let (columns, rows) = try db.fetchForExport(filterMode: filterMode)
         if rows.isEmpty { return 0 }
-        return try ArticleIO.exportCSV(columns: columns, rows: rows, to: output, excludeColumns: cfg.export.excludeColumns)
+        var exclude = Set(cfg.export.excludeColumns)
+        var headerMap: [String: String] = [:]
+        for q in cfg.classify.questions {
+            let ans = "\(q.id)_ans", rea = "\(q.id)_rea"
+            if q.export {
+                headerMap[ans] = "\(q.displayName) · 答案"
+                headerMap[rea] = "\(q.displayName) · 理由"
+            } else {
+                exclude.insert(ans); exclude.insert(rea)
+            }
+        }
+        return try ArticleIO.exportCSV(columns: columns, rows: rows, to: output,
+                                       excludeColumns: Array(exclude), headerMap: headerMap)
     }
 
     // ── 高层封装（界面按钮直接调用，返回一句结果摘要）────────────────────────

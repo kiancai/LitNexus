@@ -3,6 +3,8 @@ import SwiftUI
 struct DataView: View {
     @EnvironmentObject var app: AppState
     @State private var filter = "pending"
+    @State private var showClear = false
+    @State private var clearConfirm = ""
 
     var body: some View {
         ScrollView {
@@ -53,6 +55,8 @@ struct DataView: View {
                         if let url = FolderPicker.pickCSV() { app.importCSV(url) }
                     }.buttonStyle(OutlineButtonStyle())
                 }
+
+                databaseCard
             }
             .padding(28)
         }
@@ -60,14 +64,73 @@ struct DataView: View {
             filter = (app.config.export.filter == "all") ? "all" : "pending"
             app.refreshStats()
         }
+        .sheet(isPresented: $showClear) { clearSheet }
+    }
+
+    private var databaseCard: some View {
+        Card {
+            SectionTitle("数据库")
+            Text(verbatim: "整库可备份导出、从别处导入合并、或清空。导出为新格式 .db，可在另一台机器或新项目里导入接续。")
+                .font(.system(size: 12)).foregroundStyle(Theme.muted)
+            HStack(spacing: 8) {
+                Button("导出数据库（备份）") {
+                    let name = (app.workspace?.root.lastPathComponent ?? "litnexus") + "_" + EPMCClient.timestamp() + ".db"
+                    if let dest = FolderPicker.saveDB(defaultName: name) { app.exportDatabase(to: dest) }
+                }.buttonStyle(PrimaryButtonStyle())
+                Button("导入数据库（跳过已有）") {
+                    if let src = FolderPicker.pickDB() { app.importDatabase(from: src, strategy: .skipExisting) }
+                }.buttonStyle(OutlineButtonStyle())
+            }
+            Text(verbatim: "导入默认跳过已有文章、不覆盖你的翻译与分类，且导入前自动备份为 .db.bak。")
+                .font(.system(size: 11)).foregroundStyle(Theme.muted)
+            Button("高级导入：仅填补空缺字段…") {
+                if let src = FolderPicker.pickDB() { app.importDatabase(from: src, strategy: .fillEmpty) }
+            }
+            .buttonStyle(.plain).font(.system(size: 12)).foregroundStyle(Theme.accent)
+            .help("已有文章保留，只把当前为空的字段用导入值补上")
+            Divider().overlay(Theme.line).padding(.vertical, 2)
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("清空当前项目").font(.system(size: 13, weight: .medium)).foregroundStyle(Theme.red)
+                    Text(verbatim: "删除本项目数据库中的全部文章，保留配置与列结构。不可恢复。")
+                        .font(.system(size: 11)).foregroundStyle(Theme.muted)
+                }
+                Spacer()
+                Button("清空…") { clearConfirm = ""; showClear = true }
+                    .buttonStyle(OutlineButtonStyle())
+            }
+        }
+    }
+
+    private var clearSheet: some View {
+        let projectName = app.workspace?.root.lastPathComponent ?? ""
+        return VStack(alignment: .leading, spacing: 14) {
+            Text("清空项目数据库").font(.system(size: 16, weight: .bold))
+            Text(verbatim: "此操作将永久删除「\(projectName)」中的全部文章（含翻译、分类、复筛标注）。配置与问题保留，数据无法恢复。")
+                .font(.system(size: 12)).foregroundStyle(Theme.muted).fixedSize(horizontal: false, vertical: true)
+            Text(verbatim: "请输入项目名「\(projectName)」以确认：").font(.system(size: 12)).foregroundStyle(Theme.fg)
+            TextField("", text: $clearConfirm).textFieldStyle(.plain)
+                .padding(8).background(Theme.panel2).clipShape(RoundedRectangle(cornerRadius: 8))
+            HStack {
+                Spacer()
+                Button("取消") { showClear = false }.buttonStyle(OutlineButtonStyle())
+                Button("清空数据库") {
+                    app.clearDatabase(); showClear = false
+                }
+                .buttonStyle(PrimaryButtonStyle())
+                .disabled(clearConfirm != projectName || projectName.isEmpty)
+            }
+        }
+        .padding(24).frame(width: 460).background(Theme.panel)
     }
 
     private var statItems: [(label: String, value: Int, color: Color)] {
         var items: [(String, Int, Color)] = []
         if let v = app.stats["total"] { items.append(("总文章数", v, Theme.accent)) }
-        if let v = app.stats["pending_translation"] { items.append(("待翻译", v, Theme.cyan)) }
-        for q in app.config.classify.questions {
-            if let v = app.stats["pending_\(q.id)"] { items.append(("待分类 \(q.id)", v, Theme.cyan)) }
+        if let v = app.stats["pending_translation"] { items.append(("待译标题", v, Theme.cyan)) }
+        if let v = app.stats["pending_abstract_translation"] { items.append(("待译摘要", v, Theme.cyan)) }
+        for q in app.config.classify.questions where q.classify {
+            if let v = app.stats["pending_\(q.id)"] { items.append(("待分类 \(q.displayName)", v, Theme.cyan)) }
         }
         if let v = app.stats["reviewed_yes"] { items.append(("已收 yes", v, Theme.green)) }
         if let v = app.stats["reviewed_no"] { items.append(("已弃 no", v, Theme.muted)) }

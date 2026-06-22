@@ -9,6 +9,7 @@ struct MainView: View {
                 switch app.page {
                 case .run: RunView()
                 case .data: DataView()
+                case .stats: StatsView()
                 case .settings: SettingsView()
                 }
             }
@@ -69,12 +70,14 @@ struct Sidebar: View {
             .contentShape(Rectangle())  // 整行可点，而非仅文字/图标
         }
         .buttonStyle(.plain)
+        .focusable(false)  // 去掉首个按钮默认获得的蓝色键盘焦点环
     }
 
     private func icon(_ p: Page) -> String {
         switch p {
         case .run: return "play.circle"
         case .data: return "cylinder.split.1x2"
+        case .stats: return "chart.bar"
         case .settings: return "gearshape"
         }
     }

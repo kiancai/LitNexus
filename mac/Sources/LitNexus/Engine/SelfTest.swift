@@ -39,6 +39,18 @@ enum SelfTest {
             check("配置往返：base_url", reloaded.ai.baseURL == "https://example.com/v1")
             check("配置往返：days", reloaded.download.days == 7)
             check("配置往返：问题保留", reloaded.classify.questions.map(\.id) == ["q1", "q2"])
+            check("配置往返：昵称保留", reloaded.classify.questions.first?.nickname == "生物医学领域")
+            check("默认翻译摘要为开", reloaded.translate.translateAbstract)
+
+            // 问题模型：classify/export 开关 + 永不复用 id
+            var cfg2 = reloaded
+            cfg2.classify.questions[1].classify = false
+            cfg2.classify.questions[1].export = false
+            try ConfigStore.save(cfg2, to: ws.configPath)
+            let rel2 = try ConfigStore.load(ws.configPath)
+            check("配置往返：classify 开关", rel2.classify.questions[1].classify == false)
+            check("配置往返：export 开关", rel2.classify.questions[1].export == false)
+            check("下一个问题 id 永不复用", rel2.classify.nextQuestionID() == "q3")
 
             // 数据库：建库 + 动态列 + 去重插入 + 统计
             let dbv = try Database(path: ws.dbPath, config: cfg)
@@ -109,6 +121,36 @@ enum SelfTest {
             let (hdr, _) = CSV.parseWithHeader(csvText)
             check("CSV 表头含 epmc_id", hdr.contains("epmc_id"))
             check("CSV 排除 journal_info_json", !hdr.contains("journal_info_json"))
+            check("CSV 表头用问题昵称", hdr.contains("生物医学领域 · 答案"))
+
+            // 导出开关=关 → 该问题两列被排除
+            var cfgNoExport = cfg
+            cfgNoExport.classify.questions[0].export = false
+            let csvOut2 = ws.exportsDir.appendingPathComponent("out2.csv")
+            _ = try Pipeline.exportArticles(db: dbv, config: cfgNoExport, filterMode: "all", output: csvOut2)
+            let (hdr2, _) = CSV.parseWithHeader(try String(contentsOf: csvOut2, encoding: .utf8))
+            check("导出关闭的问题列被排除", !hdr2.contains("生物医学领域 · 答案"))
+
+            // 永久删除问题：DROP 掉 q2_ans/q2_rea
+            try dbv.dropQuestionColumns("q2")
+            let afterDrop = Set(try dbv.existingColumns())
+            check("永久删除后 q2_ans 已移除", !afterDrop.contains("q2_ans") && !afterDrop.contains("q2_rea"))
+            check("q1_ans 仍在", afterDrop.contains("q1_ans"))
+
+            // 整库导入（从另一份 .db 合并，含大小写不同的列名）
+            let srcDBPath = tmp.appendingPathComponent("src_import.db")
+            let srcDB = try Database(path: srcDBPath, config: cfg)
+            try srcDB.exec("UPDATE articles SET title='x' WHERE 0")  // 确保表存在
+            _ = try srcDB.insertArticles([[
+                "epmc_id": .text("IMP1"), "pmid": .text("9001"), "doi": .text("dimp1"),
+                "title": .text("Imported"), "pub_year": .int(2024),
+            ]])
+            let beforeImport = try dbv.stats(questions: cfg.classify.questions)["total"] ?? 0
+            let (ins, _, srcTotal) = try dbv.importFromDatabase(srcDBPath)
+            check("整库导入新增 1", ins == 1)
+            check("整库导入源库计数=1", srcTotal == 1)
+            let afterImport = try dbv.stats(questions: cfg.classify.questions)["total"] ?? 0
+            check("整库导入后 total +1", afterImport == beforeImport + 1)
 
             // 复筛 CSV 导回（include 小写归一）
             let reviewCSV = "\u{FEFF}epmc_id,include,tags\r\nE1,YES,important\r\nM1,no,\r\n"

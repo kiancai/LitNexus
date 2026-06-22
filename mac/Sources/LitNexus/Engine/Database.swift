@@ -222,20 +222,22 @@ final class Database {
 
     // ── 翻译查询 ──────────────────────────────────────────────────────────────
 
-    func fetchPendingTranslations() throws -> [(epmcID: String, title: String)] {
-        let r = try query("SELECT epmc_id, title FROM articles WHERE title IS NOT NULL AND title_zh IS NULL")
+    /// 待翻译：textColumn 非空但 zhColumn 仍为空。默认翻译标题（title → title_zh）。
+    func fetchPendingTranslations(textColumn: String = "title", zhColumn: String = "title_zh")
+        throws -> [(epmcID: String, title: String)] {
+        let r = try query("SELECT epmc_id, \(textColumn) AS src FROM articles WHERE \(textColumn) IS NOT NULL AND \(textColumn) != '' AND \(zhColumn) IS NULL")
         return r.rows.compactMap {
-            guard let id = $0["epmc_id"]?.stringValue, let title = $0["title"]?.stringValue else { return nil }
-            return (id, title)
+            guard let id = $0["epmc_id"]?.stringValue, let s = $0["src"]?.stringValue else { return nil }
+            return (id, s)
         }
     }
 
-    func updateTranslations(_ updates: [(epmcID: String, titleZh: String?)]) throws {
+    func updateTranslations(_ updates: [(epmcID: String, titleZh: String?)], column: String = "title_zh") throws {
         try exec("BEGIN")
         do {
             for u in updates {
                 _ = try run(
-                    "UPDATE articles SET title_zh = COALESCE(?, title_zh) WHERE epmc_id = ?",
+                    "UPDATE articles SET \(column) = COALESCE(?, \(column)) WHERE epmc_id = ?",
                     [u.titleZh.map { DBValue.text($0) } ?? .null, .text(u.epmcID)])
             }
             try exec("COMMIT")
@@ -336,7 +338,11 @@ final class Database {
         var out: [String: Int] = [:]
         out["total"] = try scalarInt("SELECT COUNT(*) FROM articles")
         out["pending_translation"] = try scalarInt(
-            "SELECT COUNT(*) FROM articles WHERE title IS NOT NULL AND title_zh IS NULL")
+            "SELECT COUNT(*) FROM articles WHERE title IS NOT NULL AND title != '' AND title_zh IS NULL")
+        if Set(try existingColumns()).contains("abstract_zh") {
+            out["pending_abstract_translation"] = try scalarInt(
+                "SELECT COUNT(*) FROM articles WHERE abstract IS NOT NULL AND abstract != '' AND abstract_zh IS NULL")
+        }
 
         let cols = Set(try existingColumns())
         for q in questions where cols.contains("\(q.id)_ans") {
@@ -359,6 +365,107 @@ final class Database {
         try? FileManager.default.removeItem(at: bak)
         try FileManager.default.copyItem(at: path, to: bak)
         return bak
+    }
+
+    // ── 数据库整体导出 / 导入 / 清空 ─────────────────────────────────────────────
+
+    /// 导出为一份干净的独立 .db（VACUUM INTO 会落盘所有已提交数据，无需 WAL 边车文件）。
+    func exportTo(_ dest: URL) throws {
+        try? FileManager.default.removeItem(at: dest)
+        try? FileManager.default.removeItem(at: dest.appendingPathExtension("wal"))
+        try? FileManager.default.removeItem(at: dest.appendingPathExtension("shm"))
+        _ = try run("VACUUM INTO ?", [.text(dest.path)])
+    }
+
+    /// 导入冲突策略。
+    enum ImportStrategy {
+        case skipExisting   // 已有行（同 pmid/doi）原样保留，只插入全新行（默认，最安全）
+        case fillEmpty      // 已有行：仅把当前为 NULL 的字段用源值补上；其余保留。再插入全新行
+    }
+
+    /// 从另一份 .db 导入文章。按列名大小写不敏感取交集，兼容旧库（旧列 `Include` 自动对应
+    /// 新列 `include`，多出的 JSON 列自动忽略）。返回 (新增, 既有跳过/被补, 源库总数)。
+    @discardableResult
+    func importFromDatabase(_ source: URL, strategy: ImportStrategy = .skipExisting)
+        throws -> (inserted: Int, skipped: Int, total: Int) {
+        _ = try run("ATTACH DATABASE ? AS src", [.text(source.path)])
+        defer { try? exec("DETACH DATABASE src") }
+
+        guard try !query("SELECT name FROM src.sqlite_master WHERE type='table' AND name='articles'").rows.isEmpty else {
+            throw DBError.sql("源数据库中没有 articles 表，无法导入。")
+        }
+        let srcCols = try query("PRAGMA src.table_info(articles)").rows.compactMap { $0["name"]?.stringValue }
+        let dstCols = try existingColumns()
+        let srcLower = Set(srcCols.map { $0.lowercased() })
+        // 以目标列名为准（SQLite 列名大小写不敏感，旧库 Include 能命中新列 include）
+        let common = dstCols.filter { srcLower.contains($0.lowercased()) }
+        guard !common.isEmpty else { throw DBError.sql("源库与当前库没有可对应的列。") }
+        guard common.contains("epmc_id") else { throw DBError.sql("源库缺少 epmc_id 主键，无法导入。") }
+
+        let total = try scalarInt("SELECT COUNT(*) FROM src.articles")
+        let before = try scalarInt("SELECT COUNT(*) FROM main.articles")
+        let colList = common.joined(separator: ", ")
+
+        if strategy == .fillEmpty {
+            // 先按主键补齐已有行的空字段（COALESCE 保留现有非空值），再插入全新行。
+            let setClause = common.filter { $0 != "epmc_id" }
+                .map { "\($0) = COALESCE(m.\($0), s.\($0))" }.joined(separator: ", ")
+            if !setClause.isEmpty {
+                try exec("UPDATE main.articles AS m SET \(setClause) FROM src.articles AS s WHERE s.epmc_id = m.epmc_id")
+            }
+        }
+        try exec("INSERT OR IGNORE INTO main.articles (\(colList)) SELECT \(colList) FROM src.articles")
+        let after = try scalarInt("SELECT COUNT(*) FROM main.articles")
+        let inserted = after - before
+        return (inserted, total - inserted, total)
+    }
+
+    /// 清空所有文章（保留表结构与动态列），并回收磁盘空间。
+    func clearArticles() throws {
+        try exec("DELETE FROM articles")
+        try exec("VACUUM")
+    }
+
+    /// 永久删除某问题：连同 {qid}_ans / {qid}_rea 两列及其数据一并 DROP。
+    func dropQuestionColumns(_ qid: String) throws {
+        guard Identifier.isValid(qid) else { throw DBError.sql("非法问题标识：\(qid)") }
+        try exec("DROP INDEX IF EXISTS idx_\(qid)_ans")  // 先去掉依赖该列的索引，否则 DROP COLUMN 报错
+        let existing = Set(try existingColumns())
+        for suffix in ["_ans", "_rea"] {
+            let col = "\(qid)\(suffix)"
+            if existing.contains(col) { try exec("ALTER TABLE articles DROP COLUMN \(col)") }
+        }
+    }
+
+    // ── 统计页查询 ──────────────────────────────────────────────────────────────
+
+    private func hasColumn(_ c: String) throws -> Bool { Set(try existingColumns()).contains(c) }
+
+    /// 年代 × 某维度列：返回 [(年份, 维度值, 数量)]，维度值为 nil 表示该列为空。
+    func yearDimension(_ column: String) throws -> [(year: Int, value: String?, count: Int)] {
+        guard Identifier.isValid(column), try hasColumn(column) else { return [] }
+        let r = try query("SELECT pub_year AS y, \(column) AS v, COUNT(*) AS c FROM articles WHERE pub_year IS NOT NULL GROUP BY y, v ORDER BY y")
+        return r.rows.compactMap {
+            guard let y = $0["y"]?.intValue else { return nil }
+            return (y, $0["v"]?.stringValue, $0["c"]?.intValue ?? 0)
+        }
+    }
+
+    /// 单列分组计数（含 NULL，NULL 归为 value=nil）。
+    func valueCounts(_ column: String) throws -> [(value: String?, count: Int)] {
+        guard Identifier.isValid(column), try hasColumn(column) else { return [] }
+        let r = try query("SELECT \(column) AS v, COUNT(*) AS c FROM articles GROUP BY v ORDER BY c DESC")
+        return r.rows.map { ($0["v"]?.stringValue, $0["c"]?.intValue ?? 0) }
+    }
+
+    /// Top N 非空分组（如 Top 期刊）。
+    func topValues(_ column: String, limit: Int) throws -> [(value: String, count: Int)] {
+        guard Identifier.isValid(column), try hasColumn(column) else { return [] }
+        let r = try query("SELECT \(column) AS v, COUNT(*) AS c FROM articles WHERE \(column) IS NOT NULL AND \(column) != '' GROUP BY v ORDER BY c DESC LIMIT \(max(1, limit))")
+        return r.rows.compactMap {
+            guard let v = $0["v"]?.stringValue else { return nil }
+            return (v, $0["c"]?.intValue ?? 0)
+        }
     }
 
     // ── Schema SQL ────────────────────────────────────────────────────────────

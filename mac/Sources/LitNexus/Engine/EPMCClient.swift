@@ -117,38 +117,48 @@ enum EPMCClient {
             return try FileHandle(forWritingTo: url)
         }
 
+        let totalKeywords = keywordSets.reduce(0) { $0 + $1.terms.count }
+
         if !journals.isEmpty {
             let out = ws.downloadsDir.appendingPathComponent("epmc_journals_\(ts).jsonl")
             let fh = try openFile(out)
             var totalCount = 0
-            for journal in journals {
+            for (idx, journal) in journals.enumerated() {
+                reporter?.subProgress(key: "journals", label: "期刊", current: idx, total: journals.count, item: journal)
                 reporter?.log("\n--- 抓取期刊：\(journal) ---")
                 let q = "JOURNAL:\"\(journal)\" AND \(dateQuery)"
                 let (n, _) = fetchArticles(query: q, label: journal, cfg: cfg.download, fileHandle: fh, reporter: reporter)
                 totalCount += n
                 if let taskID { reporter?.update(taskID, advance: 1) }
             }
+            reporter?.subProgress(key: "journals", label: "期刊", current: journals.count, total: journals.count, item: "完成")
             try? fh.close()
             reporter?.log("\n期刊下载完成，共 \(totalCount) 篇 → \(out.lastPathComponent)")
             generated.append(out)
         }
 
+        var kwDone = 0
         for (kwFile, terms) in keywordSets {
             let stem = kwFile.deletingPathExtension().lastPathComponent
             let out = ws.downloadsDir.appendingPathComponent("epmc_\(stem)_\(ts).jsonl")
             let fh = try openFile(out)
             var totalCount = 0
             for term in terms {
-                let label = term.count > 60 ? String(term.prefix(60)) + "..." : term
+                let label = term.count > 50 ? String(term.prefix(50)) + "…" : term
+                reporter?.subProgress(key: "keywords", label: "关键词", current: kwDone, total: totalKeywords, item: label)
                 reporter?.log("\n--- 抓取检索式：\(label) ---")
                 let q = "(\(term)) AND \(dateQuery)"
                 let (n, _) = fetchArticles(query: q, label: term, cfg: cfg.download, fileHandle: fh, reporter: reporter)
                 totalCount += n
+                kwDone += 1
                 if let taskID { reporter?.update(taskID, advance: 1) }
             }
             try? fh.close()
             reporter?.log("\n关键词下载完成（\(kwFile.lastPathComponent)），共 \(totalCount) 篇 → \(out.lastPathComponent)")
             generated.append(out)
+        }
+        if totalKeywords > 0 {
+            reporter?.subProgress(key: "keywords", label: "关键词", current: totalKeywords, total: totalKeywords, item: "完成")
         }
 
         if let taskID { reporter?.complete(taskID) }

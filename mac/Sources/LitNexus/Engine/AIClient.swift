@@ -65,38 +65,54 @@ enum AIClient {
 
     // ── 翻译 ──────────────────────────────────────────────────────────────────
 
-    static let translateSystemPrompt = """
-    You are a professional academic translator. \
-    Translate each English article title into concise, accurate Chinese. \
-    Input is a JSON array; return a JSON array of the same length in the same order. \
-    Output ONLY the JSON array, no markdown, no explanation.
-    Input:  [{"id": 1, "title": "..."}, ...]
-    Output: [{"id": 1, "title_zh": "..."}, ...]
-    """
+    // 一个可翻译字段的描述（标题或摘要）。统一用 text/text_zh 作 JSON 线协议字段名。
+    struct TranslateField {
+        let noun: String        // 英文名词，写进 prompt，如 "title" / "abstract"
+        let textColumn: String  // 源列：title / abstract
+        let zhColumn: String    // 译文列：title_zh / abstract_zh
+        let label: String       // 进度条标签：翻译标题 / 翻译摘要
+        let batchSize: (TranslateConfig) -> Int
 
-    static func parseBatchResponse(_ content: String) -> [Int: String] {
+        static let title = TranslateField(noun: "title", textColumn: "title", zhColumn: "title_zh",
+                                          label: "翻译标题", batchSize: { $0.batchSize })
+        static let abstract = TranslateField(noun: "abstract", textColumn: "abstract", zhColumn: "abstract_zh",
+                                             label: "翻译摘要", batchSize: { max(1, $0.abstractBatchSize) })
+    }
+
+    static func translateSystemPrompt(_ noun: String) -> String {
+        """
+        You are a professional academic translator. \
+        Translate each English article \(noun) into concise, accurate Chinese. \
+        Input is a JSON array; return a JSON array of the same length in the same order. \
+        Output ONLY the JSON array, no markdown, no explanation.
+        Input:  [{"id": 1, "text": "..."}, ...]
+        Output: [{"id": 1, "text_zh": "..."}, ...]
+        """
+    }
+
+    // 兼容旧测试默认 "title_zh"；新管线统一用 "text_zh"。
+    static func parseBatchResponse(_ content: String, valueKey: String = "title_zh") -> [Int: String] {
         func fromArray(_ obj: Any?) -> [Int: String]? {
             guard let arr = obj as? [[String: Any]] else { return nil }
             var out: [Int: String] = [:]
             for item in arr {
-                if let id = item["id"] as? Int, let tz = item["title_zh"] as? String { out[id] = tz }
-                else if let ids = item["id"] as? String, let id = Int(ids), let tz = item["title_zh"] as? String { out[id] = tz }
+                let tz = (item[valueKey] as? String) ?? (item["text_zh"] as? String) ?? (item["title_zh"] as? String)
+                guard let tz else { continue }
+                if let id = item["id"] as? Int { out[id] = tz }
+                else if let ids = item["id"] as? String, let id = Int(ids) { out[id] = tz }
             }
             return out
         }
-        // 层1：直接解析
         if let data = content.data(using: .utf8),
            let obj = try? JSONSerialization.jsonObject(with: data), let r = fromArray(obj), !r.isEmpty {
             return r
         }
-        // 层2：提取 ```json``` 代码块
         if let block = extractCodeBlock(content), let data = block.data(using: .utf8),
            let obj = try? JSONSerialization.jsonObject(with: data), let r = fromArray(obj), !r.isEmpty {
             return r
         }
-        // 层3：逐条正则
         var result: [Int: String] = [:]
-        let pattern = "\"id\"\\s*:\\s*(\\d+).*?\"title_zh\"\\s*:\\s*\"(.*?)\""
+        let pattern = "\"id\"\\s*:\\s*(\\d+).*?\"(?:text_zh|title_zh)\"\\s*:\\s*\"(.*?)\""
         if let re = try? NSRegularExpression(pattern: pattern, options: [.dotMatchesLineSeparators]) {
             let ns = content as NSString
             for m in re.matches(in: content, range: NSRange(location: 0, length: ns.length)) {
@@ -108,19 +124,19 @@ enum AIClient {
         return result
     }
 
-    static func translateSingle(ai: AIConfig, title: String) -> String? {
-        let sys = "You are a professional academic translator. Translate the English article title into concise, accurate Chinese. Output ONLY the translation."
-        return (try? chat(ai: ai, system: sys, user: title, temperature: 0.1))?
+    static func translateSingle(ai: AIConfig, noun: String, text: String) -> String? {
+        let sys = "You are a professional academic translator. Translate the English article \(noun) into concise, accurate Chinese. Output ONLY the translation."
+        return (try? chat(ai: ai, system: sys, user: text, temperature: 0.1))?
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    static func translateBatch(ai: AIConfig, batch: [(epmcID: String, title: String)])
+    static func translateBatch(ai: AIConfig, noun: String, batch: [(epmcID: String, title: String)])
         -> (results: [(epmcID: String, titleZh: String?)], error: String?) {
         var idToEpmc: [Int: String] = [:]
         var payload: [[String: Any]] = []
         for (i, item) in batch.enumerated() {
             idToEpmc[i + 1] = item.epmcID
-            payload.append(["id": i + 1, "title": item.title])
+            payload.append(["id": i + 1, "text": item.title])
         }
         let userMsg: String
         if let data = try? JSONSerialization.data(withJSONObject: payload) {
@@ -129,66 +145,88 @@ enum AIClient {
 
         let content: String
         do {
-            content = try chat(ai: ai, system: translateSystemPrompt, user: userMsg, temperature: 0.1)
+            content = try chat(ai: ai, system: translateSystemPrompt(noun), user: userMsg, temperature: 0.1)
         } catch {
-            // 整批失败：保持未翻译、下次重试；同时把真实原因带出去
             return (batch.map { ($0.epmcID, nil) }, (error as? LocalizedError)?.errorDescription ?? "\(error)")
         }
 
-        let parsed = parseBatchResponse(content)
-        let titleByEpmc = Dictionary(uniqueKeysWithValues: batch.map { ($0.epmcID, $0.title) })
+        let parsed = parseBatchResponse(content, valueKey: "text_zh")
+        let textByEpmc = Dictionary(uniqueKeysWithValues: batch.map { ($0.epmcID, $0.title) })
         var results: [(String, String?)] = []
         for (localID, epmcID) in idToEpmc.sorted(by: { $0.key < $1.key }) {
             if let tz = parsed[localID] {
                 results.append((epmcID, tz))
             } else {
-                results.append((epmcID, translateSingle(ai: ai, title: titleByEpmc[epmcID] ?? "")))
+                results.append((epmcID, translateSingle(ai: ai, noun: noun, text: textByEpmc[epmcID] ?? "")))
             }
         }
         return (results, nil)
     }
 
+    /// 翻译标题（始终）+ 摘要（按配置）。返回累计 (已译, 失败)。
     static func runTranslation(db: Database, config tcfg: TranslateConfig, ai: AIConfig,
                                reporter: ProgressReporter?) throws -> (translated: Int, failed: Int) {
-        let pending = try db.fetchPendingTranslations()
-        if pending.isEmpty { reporter?.log("没有需要翻译的文章。"); return (0, 0) }
-        reporter?.log("共 \(pending.count) 篇待翻译（批量 \(tcfg.batchSize)）")
+        var fields: [TranslateField] = [.title]
+        if tcfg.translateAbstract { fields.append(.abstract) }
 
-        var batches: [[(epmcID: String, title: String)]] = []
-        var i = 0
-        while i < pending.count {
-            batches.append(Array(pending[i..<min(i + tcfg.batchSize, pending.count)]))
-            i += tcfg.batchSize
-        }
+        var totalTranslated = 0, totalFailed = 0
+        var anyPending = false
+        var lastHardError: String?
 
-        let taskID = reporter?.addTask("翻译标题", total: pending.count)
-        let lock = NSLock()
-        var buffer: [(epmcID: String, titleZh: String?)] = []
-        var translated = 0, failed = 0
-        var lastError: String?
+        for field in fields {
+            let pending = try db.fetchPendingTranslations(textColumn: field.textColumn, zhColumn: field.zhColumn)
+            if pending.isEmpty { reporter?.log("\(field.label)：没有需要翻译的文章。"); continue }
+            anyPending = true
+            let bs = field.batchSize(tcfg)
+            reporter?.log("\(field.label)：共 \(pending.count) 篇待翻译（批量 \(bs)）")
 
-        try concurrentForEach(batches, concurrency: tcfg.concurrency) { batch in
-            let (res, err) = translateBatch(ai: ai, batch: batch)
-            lock.lock()
-            if let err, lastError == nil { lastError = err }
-            buffer.append(contentsOf: res)
-            for (_, tz) in res { if tz != nil { translated += 1 } else { failed += 1 } }
-            if let taskID { reporter?.update(taskID, advance: batch.count) }  // 按文章数推进
-            if buffer.count >= 500 {
-                let flush = buffer; buffer.removeAll()
-                lock.unlock()
-                try? db.updateTranslations(flush)
-                return
+            var batches: [[(epmcID: String, title: String)]] = []
+            var i = 0
+            while i < pending.count {
+                batches.append(Array(pending[i..<min(i + bs, pending.count)]))
+                i += bs
             }
-            lock.unlock()
+
+            let subLabel = field.noun == "title" ? "标题" : "摘要"
+            let taskID = reporter?.addTask(field.label, total: pending.count)
+            reporter?.subProgress(key: field.zhColumn, label: subLabel, current: 0, total: pending.count, item: "进行中")
+            let lock = NSLock()
+            var buffer: [(epmcID: String, titleZh: String?)] = []
+            var translated = 0, failed = 0
+            var lastError: String?
+
+            try concurrentForEach(batches, concurrency: tcfg.concurrency) { batch in
+                let (res, err) = translateBatch(ai: ai, noun: field.noun, batch: batch)
+                lock.lock()
+                if let err, lastError == nil { lastError = err }
+                buffer.append(contentsOf: res)
+                for (_, tz) in res { if tz != nil { translated += 1 } else { failed += 1 } }
+                if let taskID { reporter?.update(taskID, advance: batch.count) }
+                reporter?.subProgress(key: field.zhColumn, label: subLabel, current: translated + failed, total: pending.count, item: "进行中")
+                if buffer.count >= 500 {
+                    let flush = buffer; buffer.removeAll()
+                    lock.unlock()
+                    try? db.updateTranslations(flush, column: field.zhColumn)
+                    return
+                }
+                lock.unlock()
+            }
+            if !buffer.isEmpty { try db.updateTranslations(buffer, column: field.zhColumn) }
+            if let taskID { reporter?.complete(taskID) }
+            reporter?.subProgress(key: field.zhColumn, label: subLabel, current: pending.count, total: pending.count, item: "完成")
+
+            totalTranslated += translated; totalFailed += failed
+            if translated == 0, failed > 0, lastHardError == nil {
+                lastHardError = "\(field.label)全部失败（\(failed) 篇）：\(lastError ?? "未知错误")"
+            }
         }
-        if !buffer.isEmpty { try db.updateTranslations(buffer) }
-        if let taskID { reporter?.complete(taskID) }
-        // 全部失败视为硬错误，把真实原因抛给界面（而非静默显示「失败 N」）
-        if translated == 0, failed > 0 {
-            throw AIError.message("翻译全部失败（\(failed) 篇）：\(lastError ?? "未知错误")")
+
+        if !anyPending { reporter?.log("没有需要翻译的文章。"); return (0, 0) }
+        // 整体一篇都没成、却有失败 → 抛真实原因（通常是接口/密钥问题）
+        if totalTranslated == 0, totalFailed > 0 {
+            throw AIError.message(lastHardError ?? "翻译全部失败：未知错误")
         }
-        return (translated, failed)
+        return (totalTranslated, totalFailed)
     }
 
     // ── 分类 ──────────────────────────────────────────────────────────────────
@@ -245,8 +283,8 @@ enum AIClient {
 
     static func runClassification(db: Database, config ccfg: ClassifyConfig, ai: AIConfig,
                                   reporter: ProgressReporter?) throws -> (processed: Int, failed: Int) {
-        let questions = ccfg.questions
-        if questions.isEmpty { reporter?.log("未配置任何问题，跳过分类。"); return (0, 0) }
+        let questions = ccfg.questions.filter { $0.classify }   // 仅处理「AI 处理=开」的问题
+        if questions.isEmpty { reporter?.log("没有启用的分类问题，跳过分类。"); return (0, 0) }
         let pending = try db.fetchPendingClassification(questions)
         if pending.isEmpty { reporter?.log("没有需要分类的文章。"); return (0, 0) }
         reporter?.log("共 \(pending.count) 篇待分类")

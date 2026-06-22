@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import UniformTypeIdentifiers
 
 struct RootView: View {
     @EnvironmentObject var app: AppState
@@ -55,6 +56,26 @@ enum FolderPicker {
         panel.canChooseDirectories = false
         panel.allowedContentTypes = [.commaSeparatedText]
         panel.allowsMultipleSelection = false
+        return panel.runModal() == .OK ? panel.url : nil
+    }
+
+    static let dbTypes: [UTType] = [UTType(filenameExtension: "db") ?? .data,
+                                    UTType(filenameExtension: "sqlite") ?? .data, .data]
+
+    static func pickDB() -> URL? {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowedContentTypes = dbTypes
+        panel.allowsMultipleSelection = false
+        return panel.runModal() == .OK ? panel.url : nil
+    }
+
+    static func saveDB(defaultName: String) -> URL? {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [UTType(filenameExtension: "db") ?? .data]
+        panel.nameFieldStringValue = defaultName
+        panel.canCreateDirectories = true
         return panel.runModal() == .OK ? panel.url : nil
     }
 }

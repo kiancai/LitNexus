@@ -35,16 +35,34 @@ struct AIProfile: Identifiable, Equatable {
 struct TranslateConfig: Equatable {
     var batchSize: Int = 30
     var concurrency: Int = 20
+    var translateAbstract: Bool = true   // 是否默认翻译摘要（标题始终翻译）
+    var abstractBatchSize: Int = 10       // 摘要较长，批量小一些避免超出上下文
 }
 
+// 一个分类问题。id 在创建时自动分配、永不复用、对用户隐藏；
+// nickname 是用户起的短标签（导出表头用它）；classify/export 为两个独立开关。
 struct Question: Identifiable, Hashable {
     var id: String
+    var nickname: String = ""
     var text: String
+    var classify: Bool = true   // 是否让 AI 处理（关掉=停用，但保留列与数据）
+    var export: Bool = true     // 导出 CSV 时是否包含这两列
+
+    var displayName: String { nickname.trimmingCharacters(in: .whitespaces).isEmpty ? id : nickname }
 }
 
 struct ClassifyConfig: Equatable {
     var maxWorkers: Int = 100
     var questions: [Question] = Templates.defaultQuestions
+
+    /// 下一个永不复用的问题 id：取所有现存 q<N> 的最大 N + 1（含已停用问题）。
+    func nextQuestionID() -> String {
+        let maxN = questions.compactMap { q -> Int? in
+            guard q.id.hasPrefix("q"), let n = Int(q.id.dropFirst()) else { return nil }
+            return n
+        }.max() ?? 0
+        return "q\(maxN + 1)"
+    }
 }
 
 struct SchemaConfig: Equatable {

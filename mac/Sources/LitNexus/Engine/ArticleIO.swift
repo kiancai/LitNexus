@@ -71,9 +71,10 @@ enum ArticleIO {
     }
 
     /// 导出查询结果到 CSV（utf-8-sig，排除 excludeColumns 列）。返回行数。
+    /// headerMap 把内部列名映射成人类可读表头（如 q1_ans → 生物医学领域 · 答案）。
     @discardableResult
     static func exportCSV(columns: [String], rows: [[String: DBValue]], to output: URL,
-                          excludeColumns: [String]) throws -> Int {
+                          excludeColumns: [String], headerMap: [String: String] = [:]) throws -> Int {
         try FileManager.default.createDirectory(
             at: output.deletingLastPathComponent(), withIntermediateDirectories: true)
         let exclude = Set(excludeColumns)
@@ -88,7 +89,7 @@ enum ArticleIO {
             }
         }
 
-        var lines: [[String]] = [keep]
+        var lines: [[String]] = [keep.map { headerMap[$0] ?? $0 }]
         for row in rows {
             lines.append(keep.map { cell(row[$0]) })
         }
