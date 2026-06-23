@@ -10,7 +10,7 @@ struct StatsView: View {
     @State private var dimColumn = "include"   // 年代图上色维度
 
     var body: some View {
-        ScrollView {
+        PageContainer {
             VStack(alignment: .leading, spacing: 16) {
                 HStack {
                     PageHeader(title: "统计", subtitle: "语料构成、筛选与复筛进度一览")
@@ -20,7 +20,7 @@ struct StatsView: View {
                 }
 
                 if loading {
-                    Card { Text("正在统计…").font(.system(size: 12)).foregroundStyle(Theme.muted) }
+                    Card { Text("正在统计…").font(.system(size: 13)).foregroundStyle(Theme.muted) }
                 } else if let b = bundle, (b.overview["total"] ?? 0) > 0 {
                     overviewCard(b)
                     yearCard(b)
@@ -31,11 +31,10 @@ struct StatsView: View {
                 } else {
                     Card {
                         Text("数据库为空——先到「运行」下载并合并文献。")
-                            .font(.system(size: 12)).foregroundStyle(Theme.muted)
+                            .font(.system(size: 13)).foregroundStyle(Theme.muted)
                     }
                 }
             }
-            .padding(28)
         }
         .onAppear(perform: load)
     }
@@ -87,11 +86,11 @@ struct StatsView: View {
                 }
             }
             Text(verbatim: "按「\(dimLabel(b))」着色：命中 / 未命中 / 未处理")
-                .font(.system(size: 11)).foregroundStyle(Theme.muted)
+                .font(.system(size: 12)).foregroundStyle(Theme.muted)
 
             let segs = yearSegments(b)
             if segs.isEmpty {
-                Text("无带年份的数据。").font(.system(size: 12)).foregroundStyle(Theme.muted)
+                Text("无带年份的数据。").font(.system(size: 13)).foregroundStyle(Theme.muted)
             } else {
                 Chart(segs) { s in
                     BarMark(x: .value("年份", String(s.year)), y: .value("数量", s.count))
@@ -159,12 +158,12 @@ struct StatsView: View {
         Card {
             SectionTitle("各问题筛选概况")
             if b.questions.isEmpty {
-                Text("尚无分类问题。").font(.system(size: 12)).foregroundStyle(Theme.muted)
+                Text("尚无分类问题。").font(.system(size: 13)).foregroundStyle(Theme.muted)
             } else {
                 VStack(alignment: .leading, spacing: 14) {
                     ForEach(b.questions, id: \.question.id) { item in
                         VStack(alignment: .leading, spacing: 6) {
-                            Text(item.question.displayName).font(.system(size: 13, weight: .medium))
+                            Text(item.question.displayName).font(.system(size: 14, weight: .medium))
                             ProportionBar(segments: [
                                 (label: "是", count: item.yes, color: Theme.green),
                                 (label: "否", count: item.no, color: Theme.muted.opacity(0.6)),
@@ -204,10 +203,10 @@ struct StatsView: View {
                 BarMark(x: .value("数量", item.count), y: .value("期刊", item.value))
                     .foregroundStyle(Theme.accent)
                     .annotation(position: .trailing) {
-                        Text("\(item.count)").font(.system(size: 10)).foregroundStyle(Theme.muted)
+                        Text("\(item.count)").font(.system(size: 11)).foregroundStyle(Theme.muted)
                     }
             }
-            .chartYAxis { AxisMarks { _ in AxisValueLabel().font(.system(size: 10)) } }
+            .chartYAxis { AxisMarks { _ in AxisValueLabel().font(.system(size: 11)) } }
             .frame(height: CGFloat(b.topJournals.count) * 28 + 20)
         }
     }
@@ -249,7 +248,7 @@ private struct FlexLegend: View {
                 HStack(spacing: 5) {
                     RoundedRectangle(cornerRadius: 2).fill(s.color).frame(width: 9, height: 9)
                     Text(verbatim: "\(s.label) \(s.count)\(pct(s.count))")
-                        .font(.system(size: 11)).foregroundStyle(Theme.muted)
+                        .font(.system(size: 12)).foregroundStyle(Theme.muted)
                 }
             }
             Spacer()

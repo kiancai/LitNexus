@@ -174,6 +174,7 @@ enum AIClient {
         var lastHardError: String?
 
         for field in fields {
+            if reporter?.isCancelled() == true { throw PipelineCancelled() }
             let pending = try db.fetchPendingTranslations(textColumn: field.textColumn, zhColumn: field.zhColumn)
             if pending.isEmpty { reporter?.log("\(field.label)：没有需要翻译的文章。"); continue }
             anyPending = true
@@ -196,6 +197,7 @@ enum AIClient {
             var lastError: String?
 
             try concurrentForEach(batches, concurrency: tcfg.concurrency) { batch in
+                if reporter?.isCancelled() == true { return }
                 let (res, err) = translateBatch(ai: ai, noun: field.noun, batch: batch)
                 lock.lock()
                 if let err, lastError == nil { lastError = err }
@@ -221,6 +223,7 @@ enum AIClient {
             }
         }
 
+        if reporter?.isCancelled() == true { throw PipelineCancelled() }
         if !anyPending { reporter?.log("没有需要翻译的文章。"); return (0, 0) }
         // 整体一篇都没成、却有失败 → 抛真实原因（通常是接口/密钥问题）
         if totalTranslated == 0, totalFailed > 0 {
@@ -439,6 +442,7 @@ enum AIClient {
         var parseFailedIDs: [String] = []
 
         try concurrentForEach(batches, concurrency: max(1, ccfg.maxWorkers)) { batch in
+            if reporter?.isCancelled() == true { return }
             let (success, parseFailed, transient) = classifyBatchWithFallback(
                 ai: ai, batch: batch, questions: questions, maxAttempts: maxAttempts)
             lock.lock()
@@ -456,6 +460,11 @@ enum AIClient {
             lock.unlock()
         }
         if !buffer.isEmpty { try db.writeClassification(buffer) }
+
+        if reporter?.isCancelled() == true {
+            if let taskID { reporter?.complete(taskID) }
+            throw PipelineCancelled()
+        }
 
         // 本次一篇都没成功 → 视为系统性问题，抛错且不标任何「失败」，避免误伤全库。
         if processed == 0, transientFailed > 0 || !parseFailedIDs.isEmpty {

@@ -19,9 +19,23 @@ struct SettingsView: View {
     @State private var loaded = false
 
     var body: some View {
-        ScrollView {
+        PageContainer {
             VStack(alignment: .leading, spacing: 16) {
                 PageHeader(title: "配置", subtitle: "更改自动保存，无需手动操作")
+
+                Card {
+                    SectionTitle("外观")
+                    Picker("", selection: Binding(
+                        get: { app.appearance },
+                        set: { app.setAppearance($0) })) {
+                        ForEach(AppAppearance.allCases) { a in
+                            Text(a.label).tag(a)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .frame(maxWidth: 320, alignment: .leading)
+                }
 
                 Card {
                     SectionTitle("检索列表")
@@ -70,7 +84,6 @@ struct SettingsView: View {
                     }
                 }
             }
-            .padding(28)
         }
         .onAppear(perform: load)
         .onDisappear(perform: persist)
@@ -107,7 +120,7 @@ struct SettingsView: View {
     }
 
     @ViewBuilder private func label(_ t: String) -> some View {
-        Text(t).font(.system(size: 12, weight: .medium)).foregroundStyle(Theme.muted)
+        Text(t).font(.system(size: 13, weight: .medium)).foregroundStyle(Theme.muted)
     }
     @ViewBuilder private func input(_ b: Binding<String>) -> some View {
         TextField("", text: b).textFieldStyle(.plain).lineLimit(1)
@@ -115,28 +128,28 @@ struct SettingsView: View {
     }
     @ViewBuilder private func editor(_ b: Binding<String>, height: CGFloat) -> some View {
         TextEditor(text: b)
-            .font(.system(size: 12, design: .monospaced)).scrollContentBackground(.hidden)
+            .font(.system(size: 13, design: .monospaced)).scrollContentBackground(.hidden)
             .padding(6).frame(height: height)
             .background(Theme.panel2).clipShape(RoundedRectangle(cornerRadius: 8))
     }
     @ViewBuilder private func numberRow(_ t: String, _ b: Binding<Int>) -> some View {
         HStack {
-            Text(t).font(.system(size: 12)).foregroundStyle(Theme.muted).frame(width: 130, alignment: .leading)
+            Text(t).font(.system(size: 13)).foregroundStyle(Theme.muted).frame(width: 130, alignment: .leading)
             TextField("", value: b, format: .number).textFieldStyle(.plain).lineLimit(1).frame(width: 90)
                 .padding(6).background(Theme.panel2).clipShape(RoundedRectangle(cornerRadius: 6))
         }
     }
     @ViewBuilder private func doubleRow(_ t: String, _ b: Binding<Double>) -> some View {
         HStack {
-            Text(t).font(.system(size: 12)).foregroundStyle(Theme.muted).frame(width: 130, alignment: .leading)
+            Text(t).font(.system(size: 13)).foregroundStyle(Theme.muted).frame(width: 130, alignment: .leading)
             TextField("", value: b, format: .number).textFieldStyle(.plain).lineLimit(1).frame(width: 90)
                 .padding(6).background(Theme.panel2).clipShape(RoundedRectangle(cornerRadius: 6))
         }
     }
     @ViewBuilder private func pathRow(_ t: String, _ url: URL) -> some View {
         HStack {
-            Text(t).font(.system(size: 12)).foregroundStyle(Theme.muted).frame(width: 80, alignment: .leading)
-            Text(url.path).font(.system(size: 11, design: .monospaced)).foregroundStyle(Theme.fg)
+            Text(t).font(.system(size: 13)).foregroundStyle(Theme.muted).frame(width: 80, alignment: .leading)
+            Text(url.path).font(.system(size: 12, design: .monospaced)).foregroundStyle(Theme.fg)
                 .textSelection(.enabled).lineLimit(1).truncationMode(.middle)
         }
     }
@@ -152,7 +165,7 @@ struct QuestionsCard: View {
         Card {
             SectionTitle("分类问题")
             Text(verbatim: "每个问题独立配置。「AI 处理」决定是否让 AI 跑这个问题；「导出」决定是否写入导出的 CSV；昵称用作导出表头。")
-                .font(.system(size: 12)).foregroundStyle(Theme.muted)
+                .font(.system(size: 13)).foregroundStyle(Theme.muted)
 
             ForEach(app.config.classify.questions) { q in
                 if let binding = app.questionBinding(q.id) { editor(binding) }
@@ -179,18 +192,18 @@ struct QuestionsCard: View {
                     .padding(7).background(Theme.panel2).clipShape(RoundedRectangle(cornerRadius: 6))
                     .frame(maxWidth: 220)
                 Spacer()
-                Text(verbatim: "标识 \(q.wrappedValue.id)").font(.system(size: 10)).foregroundStyle(Theme.muted)
+                Text(verbatim: "标识 \(q.wrappedValue.id)").font(.system(size: 11)).foregroundStyle(Theme.muted)
                 Button { pendingDelete = q.wrappedValue } label: { Image(systemName: "trash") }
                     .buttonStyle(.plain).foregroundStyle(Theme.red).help("永久删除该问题及其数据")
             }
             TextEditor(text: q.text)
-                .font(.system(size: 12, design: .monospaced)).scrollContentBackground(.hidden)
+                .font(.system(size: 13, design: .monospaced)).scrollContentBackground(.hidden)
                 .padding(6).frame(height: 80)
                 .background(Theme.panel2).clipShape(RoundedRectangle(cornerRadius: 8))
             HStack(spacing: 18) {
                 Toggle("AI 处理", isOn: q.classify).toggleStyle(.checkbox)
                 Toggle("导出到 CSV", isOn: q.export).toggleStyle(.checkbox)
-            }.font(.system(size: 12)).foregroundStyle(Theme.fg)
+            }.font(.system(size: 13)).foregroundStyle(Theme.fg)
         }
         .padding(12)
         .background(Theme.panel2.opacity(0.5))
@@ -209,7 +222,7 @@ struct AIProfilesCard: View {
         Card {
             SectionTitle("AI 接口")
             Text("可保存多个配置方案，选择其一用于翻译与分类。")
-                .font(.system(size: 12)).foregroundStyle(Theme.muted)
+                .font(.system(size: 13)).foregroundStyle(Theme.muted)
 
             ForEach(app.config.aiProfiles) { profile in
                 let active = profile.id == app.config.activeAIID
@@ -218,9 +231,9 @@ struct AIProfilesCard: View {
                         .foregroundStyle(active ? Theme.accent : Theme.muted)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(profile.name.isEmpty ? "未命名方案" : profile.name)
-                            .font(.system(size: 13, weight: .medium))
+                            .font(.system(size: 14, weight: .medium))
                         Text(profile.isComplete ? "\(profile.model) · \(profile.baseURL)" : "尚未配置完整")
-                            .font(.system(size: 11)).foregroundStyle(Theme.muted).lineLimit(1)
+                            .font(.system(size: 12)).foregroundStyle(Theme.muted).lineLimit(1)
                     }
                     Spacer()
                     Button { app.deleteAIProfile(profile.id) } label: { Image(systemName: "trash") }
@@ -248,16 +261,16 @@ struct AIProfilesCard: View {
             field("方案名称", p.name)
             field("接口地址（Base URL）", p.baseURL)
             Text(verbatim: "接口地址通常以 /v1 结尾；也可填写完整的 /chat/completions 路径。")
-                .font(.system(size: 11)).foregroundStyle(Theme.muted)
+                .font(.system(size: 12)).foregroundStyle(Theme.muted)
             field("模型名称", p.model)
             VStack(alignment: .leading, spacing: 4) {
-                Text("API Key").font(.system(size: 12, weight: .medium)).foregroundStyle(Theme.muted)
+                Text("API Key").font(.system(size: 13, weight: .medium)).foregroundStyle(Theme.muted)
                 SecureField("", text: p.apiKey).textFieldStyle(.plain)
                     .padding(8).background(Theme.panel2).clipShape(RoundedRectangle(cornerRadius: 8))
             }
             field("额外请求参数（JSON，可选）", p.extraParams)
             Text(verbatim: "用于服务商各自不同的开关。关闭推理示例：MiMo 用 {\"thinking\": {\"type\": \"disabled\"}}；通义/Qwen 用 {\"enable_thinking\": false}；部分 OpenAI 兼容用 {\"reasoning_effort\": \"minimal\"}。写错的键会被服务器忽略，不报错。")
-                .font(.system(size: 11)).foregroundStyle(Theme.muted)
+                .font(.system(size: 12)).foregroundStyle(Theme.muted)
 
             Button(testing ? "测试中…" : "测试连接") {
                 testing = true
@@ -269,7 +282,7 @@ struct AIProfilesCard: View {
 
     @ViewBuilder private func field(_ title: String, _ b: Binding<String>) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(title).font(.system(size: 12, weight: .medium)).foregroundStyle(Theme.muted)
+            Text(title).font(.system(size: 13, weight: .medium)).foregroundStyle(Theme.muted)
             TextField("", text: b).textFieldStyle(.plain).lineLimit(1)
                 .padding(8).background(Theme.panel2).clipShape(RoundedRectangle(cornerRadius: 8))
         }

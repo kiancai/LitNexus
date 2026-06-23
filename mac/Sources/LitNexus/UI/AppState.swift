@@ -27,6 +27,9 @@ struct SubProgress: Identifiable, Equatable {
     var total: Int
     var item: String
     var eta: String = ""
+    var startedAt: Date? = nil      // 正计时起点
+    var endedAt: Date? = nil        // 完成时刻（冻结已用时间，避免跑完后继续走）
+    var etaDeadline: Date? = nil    // 倒计时终点（= 现在 + 预估剩余）
     var progress: Double? { total > 0 ? min(1, Double(current) / Double(total)) : nil }
 }
 
@@ -39,8 +42,19 @@ struct PipelineStep: Identifiable, Equatable {
     var current: Int = 0
     var total: Int = 0
     var eta: String = ""
+    var warning: String = ""        // 非致命告警（如部分检索式不完整），琥珀色显示
+    var startedAt: Date? = nil      // 正计时起点
+    var etaDeadline: Date? = nil    // 倒计时终点（= 现在 + 预估剩余）
     var subs: [SubProgress] = []
     var progress: Double? { total > 0 ? min(1, Double(current) / Double(total)) : nil }
+}
+
+// 线程安全的中止令牌：UI 线程置位，引擎后台线程在安全检查点读取。
+final class CancelToken {
+    private let lock = NSLock()
+    private var cancelled = false
+    var isCancelled: Bool { lock.lock(); defer { lock.unlock() }; return cancelled }
+    func cancel() { lock.lock(); cancelled = true; lock.unlock() }
 }
 
 // 把引擎进度上报转发到界面（日志 + 进度 + 子进度，回主线程更新）。
@@ -48,15 +62,21 @@ final class UIReporter: ProgressReporter {
     private let onLog: (String) -> Void
     private let onProgress: (_ completed: Int, _ total: Int) -> Void
     private let onSub: (_ key: String, _ label: String, _ current: Int, _ total: Int, _ item: String) -> Void
+    private let onWarn: (String) -> Void
+    private let token: CancelToken
     private var total = 0
     private var completed = 0
 
     init(onLog: @escaping (String) -> Void,
          onProgress: @escaping (Int, Int) -> Void,
-         onSub: @escaping (String, String, Int, Int, String) -> Void) {
+         onSub: @escaping (String, String, Int, Int, String) -> Void,
+         onWarn: @escaping (String) -> Void,
+         token: CancelToken) {
         self.onLog = onLog
         self.onProgress = onProgress
         self.onSub = onSub
+        self.onWarn = onWarn
+        self.token = token
     }
     func addTask(_ description: String, total: Int?) -> Int {
         self.total = total ?? 0
@@ -74,6 +94,8 @@ final class UIReporter: ProgressReporter {
     func subProgress(key: String, label: String, current: Int, total: Int, item: String) {
         onSub(key, label, current, total, item)
     }
+    func warn(_ message: String) { onLog("⚠ " + message); onWarn(message) }
+    func isCancelled() -> Bool { token.isCancelled }
 }
 
 // ── 导入数据库时的问题列对齐 ────────────────────────────────────────────────
@@ -114,8 +136,12 @@ final class AppState: ObservableObject {
     @Published var config = AppConfig()
     @Published var route: Route = .chooser
     @Published var page: Page = .run
+    @Published var appearance: AppAppearance =
+        AppAppearance(rawValue: UserDefaults.standard.string(forKey: "appearance") ?? "dark") ?? .dark
     @Published var logLines: [String] = []
     @Published var isRunning = false
+    @Published var isCancelling = false
+    private var cancelToken: CancelToken?
     @Published var stats: [String: Int] = [:]
     @Published var toast: String?
     @Published var pendingConfirm: PendingConfirm?
@@ -290,6 +316,17 @@ final class AppState: ObservableObject {
         if logLines.count > 600 { logLines.removeFirst(logLines.count - 600) }
     }
 
+    // 把告警挂到当前正在跑的步骤上（时间线以琥珀色显示，最多累计几条）。
+    private func appendWarning(_ msg: String) {
+        guard let id = currentStepID, let i = steps.firstIndex(where: { $0.id == id }) else { return }
+        let lines = steps[i].warning.isEmpty ? [] : steps[i].warning.components(separatedBy: "\n")
+        if lines.count >= 3 {
+            steps[i].warning = lines.prefix(2).joined(separator: "\n") + "\n…等更多告警见运行日志"
+        } else {
+            steps[i].warning = (lines + [msg]).joined(separator: "\n")
+        }
+    }
+
     private var currentStepID: String?
     private var stepStartTime: Date?
 
@@ -300,22 +337,33 @@ final class AppState: ObservableObject {
             steps[i].current = 0
             steps[i].total = 0
             steps[i].eta = ""
+            steps[i].warning = ""
+            steps[i].startedAt = nil
+            steps[i].etaDeadline = nil
             steps[i].subs = []
         }
     }
 
     private var subStartTimes: [String: Date] = [:]
+    private var subEndTimes: [String: Date] = [:]
 
     private func updateSub(key: String, label: String, current: Int, total: Int, item: String) {
         guard let id = currentStepID, let i = steps.firstIndex(where: { $0.id == id }) else { return }
         let tkey = "\(id):\(key)"
-        if current <= 0 || subStartTimes[tkey] == nil { subStartTimes[tkey] = Date() }
+        if subStartTimes[tkey] == nil { subStartTimes[tkey] = Date() }
+        // 跑完即冻结已用时间，避免完成后继续走（期刊跑完仍在涨、摘要把标题计时带着跑）
+        if total > 0, current >= total, subEndTimes[tkey] == nil { subEndTimes[tkey] = Date() }
         var eta = ""
-        if let start = subStartTimes[tkey], current > 0, total > current {
-            let elapsed = Date().timeIntervalSince(start)
-            eta = AppState.formatETA(elapsed / Double(current) * Double(total - current))
+        var deadline: Date? = nil
+        // 下载的预估很不准（各检索式命中差异大），只显示正计时、不显示倒计时
+        if id != "download", let start = subStartTimes[tkey], current > 0, total > current {
+            let remaining = Date().timeIntervalSince(start) / Double(current) * Double(total - current)
+            eta = AppState.formatETA(remaining)
+            deadline = Date().addingTimeInterval(remaining)
         }
-        let sub = SubProgress(key: key, label: label, current: current, total: total, item: item, eta: eta)
+        let sub = SubProgress(key: key, label: label, current: current, total: total, item: item,
+                              eta: eta, startedAt: subStartTimes[tkey], endedAt: subEndTimes[tkey],
+                              etaDeadline: deadline)
         if let j = steps[i].subs.firstIndex(where: { $0.key == key }) { steps[i].subs[j] = sub }
         else { steps[i].subs.append(sub) }
     }
@@ -328,18 +376,21 @@ final class AppState: ObservableObject {
         currentStepID = id
         stepStartTime = Date()
         setStep(id, .running, "")
+        if let i = steps.firstIndex(where: { $0.id == id }) { steps[i].startedAt = stepStartTime }
     }
 
     private func updateProgress(completed: Int, total: Int) {
         guard let id = currentStepID, let i = steps.firstIndex(where: { $0.id == id }) else { return }
         steps[i].current = completed
         steps[i].total = total
-        if let start = stepStartTime, completed > 0, total > completed {
+        if id != "download", let start = stepStartTime, completed > 0, total > completed {
             let elapsed = Date().timeIntervalSince(start)
             let remaining = elapsed / Double(completed) * Double(total - completed)
             steps[i].eta = AppState.formatETA(remaining)
+            steps[i].etaDeadline = Date().addingTimeInterval(remaining)
         } else {
             steps[i].eta = ""
+            steps[i].etaDeadline = nil
         }
     }
 
@@ -351,6 +402,20 @@ final class AppState: ObservableObject {
         return sec == 0 ? "约 \(m) 分钟" : "约 \(m) 分 \(sec) 秒"
     }
 
+    // 完成耗时（友好措辞）。
+    static func formatDuration(_ seconds: Double) -> String {
+        let t = max(0, Int(seconds.rounded()))
+        if t < 60 { return "\(t) 秒" }
+        let m = t / 60, sec = t % 60
+        return sec == 0 ? "\(m) 分钟" : "\(m) 分 \(sec) 秒"
+    }
+
+    // 进度计时器用的紧凑 mm:ss（仿标准下载进度）。
+    static func clock(_ seconds: Double) -> String {
+        let t = max(0, Int(seconds.rounded()))
+        return String(format: "%d:%02d", t / 60, t % 60)
+    }
+
     /// 按 id 顺序执行步骤，逐步更新每步状态与进度；任一步失败则停止并标红。
     /// single=true 表示单独运行（高级操作），对每一步都二次确认。
     func run(_ ids: [String], single: Bool = false) {
@@ -359,14 +424,22 @@ final class AppState: ObservableObject {
         let mode = downloadMode, days = downloadDays
         for id in ids { setStep(id, .idle, "") }
         logLines = []
+        subStartTimes = [:]
+        subEndTimes = [:]
+        let token = CancelToken()
+        cancelToken = token
+        isCancelling = false
         isRunning = true
         DispatchQueue.global().async {
             let reporter = UIReporter(
                 onLog: { line in DispatchQueue.main.async { self.appendLog(line) } },
                 onProgress: { c, t in DispatchQueue.main.async { self.updateProgress(completed: c, total: t) } },
-                onSub: { k, l, c, t, it in DispatchQueue.main.async { self.updateSub(key: k, label: l, current: c, total: t, item: it) } }
+                onSub: { k, l, c, t, it in DispatchQueue.main.async { self.updateSub(key: k, label: l, current: c, total: t, item: it) } },
+                onWarn: { msg in DispatchQueue.main.async { self.appendWarning(msg) } },
+                token: token
             )
             for id in ids {
+                if token.isCancelled { break }   // 步骤之间也可中止
                 // 二次确认：单独运行的任意步骤，或自动流程里的 AI 步骤（翻译/分类），除非已勾「默认同意」
                 if self.needsConfirm(id, single: single), !self.isAutoApproved(id) {
                     let approved = self.requestConfirmSync(stepID: id, cfg: cfg, ws: ws, mode: mode, days: days)
@@ -378,7 +451,17 @@ final class AppState: ObservableObject {
                 DispatchQueue.main.async { self.startStep(id) }
                 do {
                     let result = try AppState.work(id: id, cfg: cfg, ws: ws, mode: mode, days: days, reporter: reporter)
-                    DispatchQueue.main.async { self.setStep(id, .success, result) }
+                    DispatchQueue.main.async {
+                        var detail = result
+                        if let s = self.stepStartTime {
+                            let elapsed = Date().timeIntervalSince(s)
+                            if elapsed >= 1 { detail += " · 耗时 \(AppState.formatDuration(elapsed))" }
+                        }
+                        self.setStep(id, .success, detail)
+                    }
+                } catch is PipelineCancelled {
+                    DispatchQueue.main.async { self.setStep(id, .idle, "已中止") }
+                    break
                 } catch {
                     DispatchQueue.main.async { self.setStep(id, .failed, error.localizedDescription) }
                     break
@@ -387,6 +470,8 @@ final class AppState: ObservableObject {
             DispatchQueue.main.async {
                 self.currentStepID = nil
                 self.isRunning = false
+                self.isCancelling = false
+                self.cancelToken = nil
                 self.refreshStats()
             }
         }
@@ -395,10 +480,23 @@ final class AppState: ObservableObject {
     func runAll() { run(["download", "merge", "translate", "classify"]) }
     func runOne(_ id: String) { run([id], single: true) }
 
+    /// 请求中止：置位令牌，引擎在最近的安全检查点干净停止。
+    func cancelRun() {
+        guard isRunning, !isCancelling else { return }
+        isCancelling = true
+        cancelToken?.cancel()
+        appendLog("⏹ 已请求中止，正在安全停止当前步骤…")
+    }
+
     // ── 二次确认门控 ────────────────────────────────────────────────────────────
 
     private func needsConfirm(_ id: String, single: Bool) -> Bool {
         single || id == "translate" || id == "classify"
+    }
+
+    func setAppearance(_ a: AppAppearance) {
+        appearance = a
+        UserDefaults.standard.set(a.rawValue, forKey: "appearance")
     }
 
     func isAutoApproved(_ id: String) -> Bool {

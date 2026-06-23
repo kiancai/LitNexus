@@ -2,9 +2,13 @@ import SwiftUI
 
 struct MainView: View {
     @EnvironmentObject var app: AppState
+    @State private var columnVisibility: NavigationSplitViewVisibility = .all
+
     var body: some View {
-        HStack(spacing: 0) {
-            Sidebar()
+        NavigationSplitView(columnVisibility: $columnVisibility) {
+            SidebarContent()
+                .navigationSplitViewColumnWidth(min: 168, ideal: 196, max: 280)
+        } detail: {
             Group {
                 switch app.page {
                 case .run: RunView()
@@ -16,61 +20,56 @@ struct MainView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .background(Theme.bg)
         }
+        .navigationSplitViewStyle(.balanced)
     }
 }
 
-struct Sidebar: View {
+// 原生侧边栏：系统列表选择（自带选中高亮、随明暗自适应、分隔条可拖）。
+struct SidebarContent: View {
     @EnvironmentObject var app: AppState
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 8) {
-                Image(systemName: "testtube.2").foregroundStyle(Theme.accent)
-                Text("LitNexus").font(.system(size: 16, weight: .bold))
-            }
-            .padding(.bottom, 18)
-
-            ForEach(Page.allCases, id: \.self) { navItem($0) }
-
-            Spacer()
-            Divider().overlay(Theme.line)
-            if let ws = app.workspace {
-                Text("当前项目").font(.system(size: 11)).foregroundStyle(Theme.muted).padding(.top, 8)
-                Text(ws.root.lastPathComponent)
-                    .font(.system(size: 12)).foregroundStyle(Theme.muted).lineLimit(1)
-                HStack(spacing: 12) {
-                    Button { revealInFinder(ws.root) } label: { Image(systemName: "folder") }
-                        .buttonStyle(.plain).help("打开项目目录")
-                    Button { app.switchProject() } label: { Image(systemName: "arrow.left.arrow.right") }
-                        .buttonStyle(.plain).help("切换项目")
-                }
-                .foregroundStyle(Theme.muted).padding(.top, 4)
-            }
-        }
-        .padding(16)
-        .frame(width: 200)
-        .frame(maxHeight: .infinity, alignment: .top)
-        .background(Theme.panel)
-        .overlay(alignment: .trailing) { Rectangle().fill(Theme.line).frame(width: 1) }
+    private var selection: Binding<Page?> {
+        Binding(get: { app.page }, set: { if let v = $0 { app.page = v } })
     }
 
-    private func navItem(_ p: Page) -> some View {
-        let active = app.page == p
-        return Button { app.page = p } label: {
-            HStack(spacing: 10) {
-                Image(systemName: icon(p)).frame(width: 18)
-                Text(p.rawValue)
-                Spacer()
+    var body: some View {
+        List(selection: selection) {
+            ForEach(Page.allCases, id: \.self) { p in
+                Label(p.rawValue, systemImage: icon(p))
+                    .font(.system(size: 14))
+                    .tag(p)
             }
-            .font(.system(size: 13, weight: .medium))
-            .foregroundStyle(active ? Theme.fg : Theme.muted)
-            .padding(.horizontal, 10).padding(.vertical, 8)
-            .background(active ? Theme.panel2 : Color.clear)
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-            .contentShape(Rectangle())  // 整行可点，而非仅文字/图标
         }
-        .buttonStyle(.plain)
-        .focusable(false)  // 去掉首个按钮默认获得的蓝色键盘焦点环
+        .listStyle(.sidebar)
+        .navigationTitle("LitNexus")
+        .safeAreaInset(edge: .bottom) { footer }
+    }
+
+    @ViewBuilder private var footer: some View {
+        if let ws = app.workspace {
+            VStack(alignment: .leading, spacing: 8) {
+                Divider()
+                Text("当前项目")
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                Text(ws.root.lastPathComponent)
+                    .font(.system(size: 13, weight: .medium)).lineLimit(1)
+                HStack(spacing: 8) {
+                    Button { revealInFinder(ws.root) } label: {
+                        Label("目录", systemImage: "folder")
+                    }
+                    .help("在 Finder 中打开项目目录")
+                    Button { app.switchProject() } label: {
+                        Label("切换", systemImage: "arrow.left.arrow.right")
+                    }
+                    .help("切换到其他项目")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+            .padding(.horizontal, 12)
+            .padding(.bottom, 12)
+            .padding(.top, 4)
+        }
     }
 
     private func icon(_ p: Page) -> String {
@@ -83,14 +82,29 @@ struct Sidebar: View {
     }
 }
 
+// 各页通用容器：可滚动 + 居中定宽栏（窗口宽时封顶 760，窄时跟随收窄）+ 统一内边距。
+struct PageContainer<Content: View>: View {
+    @ViewBuilder var content: Content
+    var body: some View {
+        ScrollView {
+            HStack(spacing: 0) {
+                Spacer(minLength: 0)
+                content.frame(maxWidth: 760, alignment: .topLeading)
+                Spacer(minLength: 0)
+            }
+            .padding(28)
+        }
+    }
+}
+
 // 各页通用的标题区。
 struct PageHeader: View {
     let title: String
     let subtitle: String
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(title).font(.system(size: 24, weight: .bold))
-            Text(subtitle).font(.system(size: 13)).foregroundStyle(Theme.muted)
+            Text(title).font(.system(size: 25, weight: .bold))
+            Text(subtitle).font(.system(size: 14)).foregroundStyle(Theme.muted)
         }
     }
 }

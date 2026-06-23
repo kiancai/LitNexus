@@ -26,8 +26,8 @@ enum SelfTestLive {
             cfg.download.days = 3
 
             let reporter = PrintReporter()
-            let files = try EPMCClient.runDownload(config: cfg, workspace: ws, mode: "journals", days: 3, reporter: reporter)
-            print("生成 JSONL：\(files.map(\.lastPathComponent))")
+            let dl = try EPMCClient.runDownload(config: cfg, workspace: ws, mode: "journals", days: 3, reporter: reporter)
+            print("生成 JSONL：\(dl.files.map(\.lastPathComponent))（期刊 \(dl.journalCount) 篇）")
 
             let db = try Database(path: ws.dbPath, config: cfg)
             let mr = try Pipeline.mergeJSONL(db: db, downloadsDir: ws.downloadsDir, reporter: reporter)

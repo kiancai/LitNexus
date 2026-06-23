@@ -14,17 +14,17 @@ struct SetupWizardView: View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 8) {
                 Image(systemName: "sparkles").foregroundStyle(Theme.accent)
-                Text("首次设置").font(.system(size: 24, weight: .bold))
+                Text("首次设置").font(.system(size: 25, weight: .bold))
             }
             if let ws = app.workspace {
-                Text("项目：\(ws.root.path)").font(.system(size: 12)).foregroundStyle(Theme.muted)
+                Text("项目：\(ws.root.path)").font(.system(size: 13)).foregroundStyle(Theme.muted)
             }
 
             if step == 0 {
                 Card {
                     SectionTitle("第一步 · 检索列表")
                     Text("用于确定抓取范围，已预填示例，可按需修改。")
-                        .font(.system(size: 12)).foregroundStyle(Theme.muted)
+                        .font(.system(size: 13)).foregroundStyle(Theme.muted)
                     fieldLabel("期刊（每行一个）")
                     editor($journals, height: 110)
                     fieldLabel("关键词检索式（每行一个）")
@@ -38,11 +38,11 @@ struct SetupWizardView: View {
                 Card {
                     SectionTitle("第二步 · AI 接口")
                     Text("翻译与分类需要一个 OpenAI 兼容接口（无默认值，请填写你的服务商信息）。")
-                        .font(.system(size: 12)).foregroundStyle(Theme.muted)
+                        .font(.system(size: 13)).foregroundStyle(Theme.muted)
                     fieldLabel("接口地址（Base URL）")
                     input($baseURL)
                     Text(verbatim: "接口地址通常以 /v1 结尾；也可填写完整的 /chat/completions 路径。")
-                        .font(.system(size: 11)).foregroundStyle(Theme.muted)
+                        .font(.system(size: 12)).foregroundStyle(Theme.muted)
                     fieldLabel("模型名称")
                     input($model)
                     fieldLabel("API Key")
@@ -59,7 +59,7 @@ struct SetupWizardView: View {
             }
 
             Button("跳过") { app.route = .main }
-                .buttonStyle(.plain).font(.system(size: 12)).foregroundStyle(Theme.muted)
+                .buttonStyle(.plain).font(.system(size: 13)).foregroundStyle(Theme.muted)
                 .frame(maxWidth: .infinity)
         }
         .padding(40)
@@ -93,7 +93,7 @@ struct SetupWizardView: View {
     }
 
     @ViewBuilder private func fieldLabel(_ t: String) -> some View {
-        Text(t).font(.system(size: 12, weight: .medium)).foregroundStyle(Theme.muted)
+        Text(t).font(.system(size: 13, weight: .medium)).foregroundStyle(Theme.muted)
     }
     @ViewBuilder private func input(_ b: Binding<String>) -> some View {
         TextField("", text: b).textFieldStyle(.plain).lineLimit(1)
@@ -101,7 +101,7 @@ struct SetupWizardView: View {
     }
     @ViewBuilder private func editor(_ b: Binding<String>, height: CGFloat) -> some View {
         TextEditor(text: b)
-            .font(.system(size: 12, design: .monospaced))
+            .font(.system(size: 13, design: .monospaced))
             .scrollContentBackground(.hidden)
             .padding(6).frame(height: height)
             .background(Theme.panel2).clipShape(RoundedRectangle(cornerRadius: 8))

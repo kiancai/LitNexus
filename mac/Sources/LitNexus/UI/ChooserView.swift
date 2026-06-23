@@ -14,13 +14,13 @@ struct ChooserView: View {
 
     var body: some View {
         VStack(spacing: 16) {
-            Image(systemName: "testtube.2").font(.system(size: 48)).foregroundStyle(Theme.accent)
-            Text("LitNexus").font(.system(size: 30, weight: .bold))
+            Image(systemName: "testtube.2").font(.system(size: 49)).foregroundStyle(Theme.accent)
+            Text("LitNexus").font(.system(size: 31, weight: .bold))
             Text("选择一个项目文件夹，所有数据都保存在其中")
                 .font(.callout).foregroundStyle(Theme.muted)
 
             Card {
-                Text("项目文件夹").font(.system(size: 12)).foregroundStyle(Theme.muted)
+                Text("项目文件夹").font(.system(size: 13)).foregroundStyle(Theme.muted)
                 TextField("", text: $path)
                     .textFieldStyle(.plain)
                     .padding(8)
@@ -38,16 +38,16 @@ struct ChooserView: View {
                     }.buttonStyle(PrimaryButtonStyle())
                 }
                 Text("若文件夹已存在则打开，否则新建。")
-                    .font(.system(size: 11)).foregroundStyle(Theme.muted)
+                    .font(.system(size: 12)).foregroundStyle(Theme.muted)
 
                 let recent = WorkspaceStore.listRecent()
                 if !recent.isEmpty {
                     Divider().overlay(Theme.line)
-                    Text("最近打开").font(.system(size: 11)).foregroundStyle(Theme.muted)
+                    Text("最近打开").font(.system(size: 12)).foregroundStyle(Theme.muted)
                     ForEach(recent.prefix(5), id: \.self) { r in
                         Button(r.path) { app.openOrCreate(r) }
                             .buttonStyle(.plain)
-                            .font(.system(size: 11))
+                            .font(.system(size: 12))
                             .foregroundStyle(Theme.accent)
                     }
                 }

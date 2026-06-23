@@ -22,6 +22,7 @@ enum Pipeline {
         var inserted = 0, skipped = 0, errors = 0
         let taskID = reporter?.addTask("合并入库", total: files.count)
         for f in files {
+            if reporter?.isCancelled() == true { throw PipelineCancelled() }
             reporter?.log("处理：\(f.lastPathComponent)")
             var batch: [[String: DBValue]] = []
             var fileErrors = 0
@@ -68,27 +69,42 @@ enum Pipeline {
 
     static func doDownload(config cfg: AppConfig, workspace ws: Workspace, mode: String, days: Int,
                            reporter: ProgressReporter?) throws -> String {
-        let files = try EPMCClient.runDownload(config: cfg, workspace: ws, mode: mode, days: days, reporter: reporter)
-        return "生成 \(files.count) 个 JSONL 文件"
+        let r = try EPMCClient.runDownload(config: cfg, workspace: ws, mode: mode, days: days, reporter: reporter)
+        let sum = r.journalCount + r.keywordCount
+        if sum == 0 { return "未取到新文献" }
+        var parts: [String] = []
+        if r.journalCount > 0 { parts.append("期刊 \(r.journalCount) 篇") }
+        if r.keywordCount > 0 { parts.append("关键词 \(r.keywordCount) 篇") }
+        // 只有单一来源时不重复显示总数
+        return parts.count > 1 ? parts.joined(separator: " · ") + "，共 \(sum) 篇" : parts.joined()
     }
 
     static func doMerge(config cfg: AppConfig, workspace ws: Workspace, reporter: ProgressReporter?) throws -> String {
         let db = try Database(path: ws.dbPath, config: cfg)
         let r = try mergeJSONL(db: db, downloadsDir: ws.downloadsDir, reporter: reporter)
         if r.files == 0 { return "没有新的下载文件可合并" }
-        return "处理 \(r.files) 个文件：新增 \(r.inserted)，重复 \(r.skipped)，错误 \(r.errors)"
+        var s = "新增入库 \(r.inserted) 篇"
+        if r.skipped > 0 { s += " · 去重 \(r.skipped)" }
+        if r.errors > 0 { s += " · 错误 \(r.errors)" }
+        return s
     }
 
     static func doTranslate(config cfg: AppConfig, workspace ws: Workspace, reporter: ProgressReporter?) throws -> String {
         let db = try Database(path: ws.dbPath, config: cfg)
         let (t, f) = try AIClient.runTranslation(db: db, config: cfg.translate, ai: cfg.resolvedAI, reporter: reporter)
-        return "翻译 \(t)，失败 \(f)"
+        if t == 0 && f == 0 { return "没有需要翻译的内容" }
+        var s = "翻译 \(t) 篇"
+        if f > 0 { s += " · 失败 \(f)" }
+        return s
     }
 
     static func doClassify(config cfg: AppConfig, workspace ws: Workspace, reporter: ProgressReporter?) throws -> String {
         let db = try Database(path: ws.dbPath, config: cfg)
         let (p, f) = try AIClient.runClassification(db: db, config: cfg.classify, ai: cfg.resolvedAI, reporter: reporter)
-        return "分类 \(p)，失败 \(f)"
+        if p == 0 && f == 0 { return "没有需要分类的文章" }
+        var s = "分类 \(p) 篇"
+        if f > 0 { s += " · 失败 \(f)" }
+        return s
     }
 
     static func doExport(config cfg: AppConfig, workspace ws: Workspace, filterMode: String,

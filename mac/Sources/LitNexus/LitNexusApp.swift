@@ -37,8 +37,8 @@ struct LitNexusApp: App {
         WindowGroup("LitNexus") {
             RootView()
                 .environmentObject(app)
-                .frame(minWidth: 920, minHeight: 620)
-                .preferredColorScheme(.dark)
+                .frame(minWidth: 560, minHeight: 520)
+                .preferredColorScheme(app.appearance.colorScheme)
         }
         .windowStyle(.titleBar)
         .windowResizability(.contentSize)

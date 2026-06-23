@@ -19,7 +19,7 @@ struct RootView: View {
         .overlay(alignment: .bottom) {
             if let toast = app.toast {
                 Text(toast)
-                    .font(.system(size: 13))
+                    .font(.system(size: 14))
                     .foregroundStyle(Theme.fg)
                     .padding(.horizontal, 16).padding(.vertical, 10)
                     .background(Theme.panel2)
