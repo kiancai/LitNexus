@@ -26,6 +26,7 @@ struct SubProgress: Identifiable, Equatable {
     var current: Int
     var total: Int
     var item: String
+    var eta: String = ""
     var progress: Double? { total > 0 ? min(1, Double(current) / Double(total)) : nil }
 }
 
@@ -303,9 +304,18 @@ final class AppState: ObservableObject {
         }
     }
 
+    private var subStartTimes: [String: Date] = [:]
+
     private func updateSub(key: String, label: String, current: Int, total: Int, item: String) {
         guard let id = currentStepID, let i = steps.firstIndex(where: { $0.id == id }) else { return }
-        let sub = SubProgress(key: key, label: label, current: current, total: total, item: item)
+        let tkey = "\(id):\(key)"
+        if current <= 0 || subStartTimes[tkey] == nil { subStartTimes[tkey] = Date() }
+        var eta = ""
+        if let start = subStartTimes[tkey], current > 0, total > current {
+            let elapsed = Date().timeIntervalSince(start)
+            eta = AppState.formatETA(elapsed / Double(current) * Double(total - current))
+        }
+        let sub = SubProgress(key: key, label: label, current: current, total: total, item: item, eta: eta)
         if let j = steps[i].subs.firstIndex(where: { $0.key == key }) { steps[i].subs[j] = sub }
         else { steps[i].subs.append(sub) }
     }
@@ -508,8 +518,9 @@ final class AppState: ObservableObject {
             let msg: String
             do {
                 let db = try Database(path: ws.dbPath, config: cfg)
+                let bak = try db.backup()  // 写回标注前自动备份，可回滚
                 let (upd, unm, tot) = try ArticleIO.importReviewedCSV(db, csvPath: url, annotationColumns: cfg.schema.customColumns)
-                msg = "导入完成：更新 \(upd)，未匹配 \(unm)，共 \(tot) 行"
+                msg = "导入完成：更新 \(upd)，未匹配 \(unm)，共 \(tot) 行 · 已备份 \(bak.lastPathComponent)"
             } catch { msg = "导入失败：\(error.localizedDescription)" }
             DispatchQueue.main.async { self.toast = msg; self.refreshStats() }
         }

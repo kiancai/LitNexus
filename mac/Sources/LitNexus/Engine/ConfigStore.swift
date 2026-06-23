@@ -97,6 +97,8 @@ enum ConfigStore {
 
         if let c = table["classify"]?.tomlValue.table {
             cfg.classify.maxWorkers = c["max_workers"]?.tomlValue.int ?? cfg.classify.maxWorkers
+            cfg.classify.batchSize = c["batch_size"]?.tomlValue.int ?? cfg.classify.batchSize
+            cfg.classify.maxAttempts = c["max_attempts"]?.tomlValue.int ?? cfg.classify.maxAttempts
             if let qs = c["questions"]?.tomlValue.array {
                 var questions: [Question] = []
                 for item in qs {
@@ -170,6 +172,8 @@ enum ConfigStore {
 
         let classify = TOMLTable()
         classify["max_workers"] = cfg.classify.maxWorkers
+        classify["batch_size"] = cfg.classify.batchSize
+        classify["max_attempts"] = cfg.classify.maxAttempts
         let questions = TOMLArray()
         for q in cfg.classify.questions {
             let qt = TOMLTable()

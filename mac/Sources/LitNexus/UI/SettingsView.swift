@@ -10,7 +10,9 @@ struct SettingsView: View {
     @State private var requestDelay = 0.5
     @State private var batchSize = 30
     @State private var concurrency = 20
-    @State private var maxWorkers = 100
+    @State private var maxWorkers = 20
+    @State private var classifyBatchSize = 15
+    @State private var classifyAttempts = 3
     @State private var exportFilter = "pending"
     @State private var excludeColumns = ""
     @State private var customColumns = ""
@@ -41,7 +43,9 @@ struct SettingsView: View {
                             doubleRow("请求间隔（秒）", $requestDelay)
                             numberRow("翻译批量大小", $batchSize)
                             numberRow("翻译并发数", $concurrency)
-                            numberRow("分类并发数", $maxWorkers)
+                            numberRow("分类批量大小", $classifyBatchSize)
+                            numberRow("分类并发数（批）", $maxWorkers)
+                            numberRow("分类失败重试上限", $classifyAttempts)
                             label("默认导出范围"); input($exportFilter)
                             label("导出排除列（逗号分隔）"); input($excludeColumns)
                             label("人工标注列（逗号分隔）"); input($customColumns)
@@ -78,7 +82,8 @@ struct SettingsView: View {
         let c = app.config
         journals = app.readJournals(); keywords = app.readKeywords()
         days = c.download.days; pageSize = c.download.pageSize; requestDelay = c.download.requestDelay
-        batchSize = c.translate.batchSize; concurrency = c.translate.concurrency; maxWorkers = c.classify.maxWorkers
+        batchSize = c.translate.batchSize; concurrency = c.translate.concurrency
+        maxWorkers = c.classify.maxWorkers; classifyBatchSize = c.classify.batchSize; classifyAttempts = c.classify.maxAttempts
         exportFilter = c.export.filter
         excludeColumns = c.export.excludeColumns.joined(separator: ", ")
         customColumns = c.schema.customColumns.joined(separator: ", ")
@@ -89,7 +94,8 @@ struct SettingsView: View {
         guard loaded else { return }
         var c = app.config   // 分类问题由 QuestionsCard 即时持久化，这里不覆盖
         c.download.days = days; c.download.pageSize = pageSize; c.download.requestDelay = requestDelay
-        c.translate.batchSize = batchSize; c.translate.concurrency = concurrency; c.classify.maxWorkers = maxWorkers
+        c.translate.batchSize = batchSize; c.translate.concurrency = concurrency
+        c.classify.maxWorkers = maxWorkers; c.classify.batchSize = classifyBatchSize; c.classify.maxAttempts = classifyAttempts
         c.export.filter = exportFilter.trimmingCharacters(in: .whitespaces).isEmpty ? "pending" : exportFilter
         c.export.excludeColumns = splitList(excludeColumns)
         c.schema.customColumns = splitList(customColumns).filter { Identifier.isValid($0) }

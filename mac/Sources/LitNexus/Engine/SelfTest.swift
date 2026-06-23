@@ -186,6 +186,11 @@ enum SelfTest {
             let rs = try dbv.stats(questions: cfg.classify.questions)
             check("import include 归一 reviewed_yes=1", rs["reviewed_yes"] == 1)
             check("import reviewed_no=1", rs["reviewed_no"] == 1)
+            check("待复筛 reviewed_pending=1（IMP1 未复筛）", rs["reviewed_pending"] == 1)
+            let incCSV = ws.exportsDir.appendingPathComponent("inc.csv")
+            check("导出筛选 已纳入=1", try Pipeline.exportArticles(db: dbv, config: cfg, filterMode: "included", output: incCSV) == 1)
+            let excCSV = ws.exportsDir.appendingPathComponent("exc.csv")
+            check("导出筛选 已排除=1", try Pipeline.exportArticles(db: dbv, config: cfg, filterMode: "excluded", output: excCSV) == 1)
 
             // AI 响应解析（离线）
             let tb = AIClient.parseBatchResponse("[{\"id\":1,\"title_zh\":\"标题一\"},{\"id\":2,\"title_zh\":\"标题二\"}]")
@@ -197,6 +202,35 @@ enum SelfTest {
                 questions: cfg.classify.questions)
             check("parseClassifyResponse q1=是", cls["q1"]?.answer == "是")
             check("parseClassifyResponse q2 reason", cls["q2"]?.reason == "r2")
+
+            // 批量分类解析（多篇一次）
+            let bc = AIClient.parseBatchClassify(
+                "[{\"id\":1,\"q1\":{\"answer\":\"是\",\"reason\":\"r1\"},\"q2\":{\"answer\":\"否\",\"reason\":\"r2\"}},"
+                + "{\"id\":2,\"q1\":{\"answer\":\"否\",\"reason\":\"x\"},\"q2\":{\"answer\":\"是\",\"reason\":\"y\"}}]",
+                questions: cfg.classify.questions, idToEpmc: [1: "A", 2: "B"])
+            check("批量分类解析 A q1=是", bc["A"]?["q1"]?.answer == "是")
+            check("批量分类解析 B q2=是", bc["B"]?["q2"]?.answer == "是")
+            let bcIncomplete = AIClient.parseBatchClassify(
+                "[{\"id\":1,\"q1\":{\"answer\":\"是\",\"reason\":\"r\"}}]",
+                questions: cfg.classify.questions, idToEpmc: [1: "A"])
+            check("批量分类：缺问题的整篇丢弃", bcIncomplete.isEmpty)
+
+            // CSV 健壮性：写入器转义 + 读取器宽容（防止野引号吞行、丢标注）
+            let tricky = [
+                ["epmc_id", "include", "tags"],
+                ["E1", "yes", "含逗号,和\"引号\"与\n换行"],
+                ["E2", "no", "中文，逗号与裸引号P2\"特异性"],
+            ]
+            let rt = CSV.parse(CSV.write(tricky))
+            check("CSV 往返行数=3", rt.count == 3)
+            check("CSV 往返保真：逗号/引号/换行", rt[1][2] == "含逗号,和\"引号\"与\n换行")
+            check("CSV 往返保真：中文裸引号", rt[2][2] == "中文，逗号与裸引号P2\"特异性")
+            // 畸形输入（未转义、未包裹的裸引号）不应吞掉后续行
+            let malformed = "a,b,c\r\nx,P2\"specificity here,z\r\nq,r,s\r\n"
+            let mrows = CSV.parse(malformed)
+            check("宽容解析：野引号不吞行（3 行）", mrows.count == 3)
+            check("宽容解析：裸引号字段保真", mrows[1][1] == "P2\"specificity here")
+            check("宽容解析：后续行完整", mrows[2] == ["q", "r", "s"])
         } catch {
             failed += 1
             print("  ✗ 异常：\(error)")

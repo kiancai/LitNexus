@@ -66,12 +66,10 @@ struct StatsView: View {
 
     private func overviewItems(_ b: StatsBundle) -> [(label: String, value: Int, color: Color)] {
         var items: [(String, Int, Color)] = []
-        let total = b.overview["total"] ?? 0
-        items.append(("总文章数", total, Theme.accent))
-        if let v = b.overview["pending_translation"] { items.append(("待译标题", v, Theme.cyan)) }
-        if let v = b.overview["pending_abstract_translation"] { items.append(("待译摘要", v, Theme.cyan)) }
-        items.append(("已复筛纳入", b.overview["reviewed_yes"] ?? 0, Theme.green))
-        items.append(("已复筛排除", b.overview["reviewed_no"] ?? 0, Theme.muted))
+        items.append(("总文章数", b.overview["total"] ?? 0, Theme.accent))
+        items.append(("已纳入", b.overview["reviewed_yes"] ?? 0, Theme.green))
+        items.append(("已排除", b.overview["reviewed_no"] ?? 0, Theme.muted))
+        items.append(("待复筛", b.overview["reviewed_pending"] ?? 0, Theme.amber))
         return items.map { (label: $0.0, value: $0.1, color: $0.2) }
     }
 

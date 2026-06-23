@@ -13,7 +13,7 @@ struct DataView: View {
 
                 Card {
                     HStack {
-                        SectionTitle("统计")
+                        SectionTitle("状态")
                         Spacer()
                         Button { app.refreshStats() } label: { Image(systemName: "arrow.clockwise") }
                             .buttonStyle(.plain).foregroundStyle(Theme.muted)
@@ -22,11 +22,11 @@ struct DataView: View {
                         Text("数据库尚未创建——先到「运行」执行下载 + 合并。")
                             .font(.system(size: 12)).foregroundStyle(Theme.muted)
                     } else {
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 130), spacing: 12)], alignment: .leading, spacing: 12) {
-                            ForEach(statItems, id: \.label) { item in
-                                StatCard(value: item.value, label: item.label, color: item.color)
-                            }
-                        }
+                        statGroup("总览", [("总文章数", app.stats["total"] ?? 0, Theme.accent)])
+                        statGroup("处理进度", progressItems)
+                        statGroup("复筛", [("待复筛", app.stats["reviewed_pending"] ?? 0, Theme.amber)])
+                        Text(verbatim: "纳入/排除数量、各问题占比、年代与来源分布等分析，在「统计」页查看。")
+                            .font(.system(size: 11)).foregroundStyle(Theme.muted)
                     }
                 }
 
@@ -34,8 +34,10 @@ struct DataView: View {
                     SectionTitle("导出 CSV")
                     HStack(spacing: 12) {
                         Picker("导出范围", selection: $filter) {
-                            Text("未复筛 (pending)").tag("pending")
-                            Text("全部 (all)").tag("all")
+                            Text("待复筛").tag("pending")
+                            Text("已纳入").tag("included")
+                            Text("已排除").tag("excluded")
+                            Text("全部").tag("all")
                         }.frame(width: 240)
                     }
                     Expander("选择导出列") {
@@ -139,17 +141,36 @@ struct DataView: View {
         .padding(24).frame(width: 460).background(Theme.panel)
     }
 
-    private var statItems: [(label: String, value: Int, color: Color)] {
+    // 处理进度（待办类）：待译标题/摘要、各启用问题的待分类数。
+    private var progressItems: [(String, Int, Color)] {
         var items: [(String, Int, Color)] = []
-        if let v = app.stats["total"] { items.append(("总文章数", v, Theme.accent)) }
-        if let v = app.stats["pending_translation"] { items.append(("待译标题", v, Theme.cyan)) }
-        if let v = app.stats["pending_abstract_translation"] { items.append(("待译摘要", v, Theme.cyan)) }
+        items.append(("待译标题", app.stats["pending_translation"] ?? 0, Theme.cyan))
+        if app.stats["pending_abstract_translation"] != nil {
+            items.append(("待译摘要", app.stats["pending_abstract_translation"] ?? 0, Theme.cyan))
+        }
         for q in app.config.classify.questions where q.classify {
             if let v = app.stats["pending_\(q.id)"] { items.append(("待分类 \(q.displayName)", v, Theme.cyan)) }
         }
-        if let v = app.stats["reviewed_yes"] { items.append(("已收 yes", v, Theme.green)) }
-        if let v = app.stats["reviewed_no"] { items.append(("已弃 no", v, Theme.muted)) }
-        return items.map { (label: $0.0, value: $0.1, color: $0.2) }
+        return items
+    }
+
+    @ViewBuilder private func statGroup(_ title: String, _ items: [(String, Int, Color)]) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title).font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.muted)
+            if items.allSatisfy({ $0.1 == 0 }) && title == "处理进度" {
+                HStack(spacing: 6) {
+                    Image(systemName: "checkmark.circle.fill").foregroundStyle(Theme.green)
+                    Text("全部处理完成").font(.system(size: 13)).foregroundStyle(Theme.green)
+                }.padding(.vertical, 4)
+            } else {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 130), spacing: 12)], alignment: .leading, spacing: 12) {
+                    ForEach(items, id: \.0) { item in
+                        StatCard(value: item.1, label: item.0, color: item.2)
+                    }
+                }
+            }
+        }
+        .padding(.top, 4)
     }
 }
 

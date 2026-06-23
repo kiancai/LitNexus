@@ -328,17 +328,17 @@ final class Database {
     // ── 导出查询 ──────────────────────────────────────────────────────────────
 
     func fetchForExport(filterMode: String) throws -> (columns: [String], rows: [[String: DBValue]]) {
+        let needsInclude = ["pending", "included", "excluded"]
+        if needsInclude.contains(filterMode), try !existingColumns().contains("include") {
+            throw DBError.exportFilter("该导出范围需要 include 列，但当前数据库没有。请改用「全部」或在标注列中保留 include。")
+        }
         let whereClause: String
         switch filterMode {
-        case "pending":
-            guard try existingColumns().contains("include") else {
-                throw DBError.exportFilter("导出筛选 'pending' 需要 include 列，但当前数据库没有该列。请改用 all 或在标注列中保留 include。")
-            }
-            whereClause = "include IS NULL"
-        case "all":
-            whereClause = "1=1"
-        default:
-            whereClause = filterMode
+        case "pending":  whereClause = "include IS NULL"     // 待复筛
+        case "included": whereClause = "include = 'yes'"     // 已纳入
+        case "excluded": whereClause = "include = 'no'"      // 已排除
+        case "all":      whereClause = "1=1"
+        default:         whereClause = filterMode
         }
         return try query("SELECT * FROM articles WHERE \(whereClause) ORDER BY pub_year DESC")
     }
@@ -367,6 +367,7 @@ final class Database {
         if cols.contains("include") {
             out["reviewed_yes"] = try scalarInt("SELECT COUNT(*) FROM articles WHERE include = 'yes'")
             out["reviewed_no"] = try scalarInt("SELECT COUNT(*) FROM articles WHERE include = 'no'")
+            out["reviewed_pending"] = try scalarInt("SELECT COUNT(*) FROM articles WHERE include IS NULL")
         }
         return out
     }

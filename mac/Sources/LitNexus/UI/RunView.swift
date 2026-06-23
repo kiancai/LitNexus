@@ -153,6 +153,10 @@ struct StepRow: View {
                 Text("\(sub.current) / \(sub.total)").font(.system(size: 11)).foregroundStyle(Theme.muted)
                     .frame(width: 70, alignment: .trailing)
             }
+            if !sub.eta.isEmpty {
+                Text(verbatim: "预计剩余 \(sub.eta)")
+                    .font(.system(size: 10)).foregroundStyle(Theme.muted).padding(.leading, 58)
+            }
             if !sub.item.isEmpty {
                 Text(verbatim: "当前：\(sub.item)")
                     .font(.system(size: 10)).foregroundStyle(Theme.muted)

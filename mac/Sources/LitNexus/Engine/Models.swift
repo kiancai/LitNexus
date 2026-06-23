@@ -55,7 +55,9 @@ struct Question: Identifiable, Hashable {
 }
 
 struct ClassifyConfig: Equatable {
-    var maxWorkers: Int = 100
+    var maxWorkers: Int = 20    // 并发的「批」数量（每批一次 API 调用）
+    var batchSize: Int = 15     // 每次 API 调用合并多少篇文章（受输出 token 上限与准确率约束，别过大）
+    var maxAttempts: Int = 3    // 同一批/篇解析失败重试上限，超过则标记为「失败」、不再无限重试
     var questions: [Question] = Templates.defaultQuestions
 
     /// 下一个永不复用的问题 id：取所有现存 q<N> 的最大 N + 1（含已停用问题）。
