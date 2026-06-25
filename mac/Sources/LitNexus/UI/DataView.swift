@@ -22,27 +22,17 @@ struct DataView: View {
                         Text("数据库尚未创建——先到「运行」执行下载 + 合并。")
                             .font(.system(size: 13)).foregroundStyle(Theme.muted)
                     } else {
-                        statGroup("总览", [("总文章数", app.stats["total"] ?? 0, Theme.accent)])
-                        statGroup("处理进度", progressItems)
-                        statGroup("复筛", [("待复筛", app.stats["reviewed_pending"] ?? 0, Theme.amber)])
-                        Text(verbatim: "纳入/排除数量、各问题占比、年代与来源分布等分析，在「统计」页查看。")
-                            .font(.system(size: 12)).foregroundStyle(Theme.muted)
+                        reviewFunnel
+                        Expander("处理进度") { processingProgress }
                     }
                 }
 
                 Card {
                     SectionTitle("导出 CSV")
-                    HStack(spacing: 12) {
-                        Picker("导出范围", selection: $filter) {
-                            Text("待复筛").tag("pending")
-                            Text("已纳入").tag("included")
-                            Text("已排除").tag("excluded")
-                            Text("全部").tag("all")
-                        }.frame(width: 240)
-                    }
+                    scopeChips
                     Expander("选择导出列") {
                         VStack(alignment: .leading, spacing: 6) {
-                            Text(verbatim: "勾选要写入 CSV 的列。问题的答案/理由列由「配置 → 分类问题」里各自的「导出」开关控制。")
+                            Text(verbatim: "勾选写入 CSV 的列。问题的答案与理由列在「配置 → 分类问题」中单独控制。")
                                 .font(.system(size: 12)).foregroundStyle(Theme.muted)
                             LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 8)], alignment: .leading, spacing: 6) {
                                 ForEach(app.exportableColumns(), id: \.col) { item in
@@ -65,7 +55,7 @@ struct DataView: View {
 
                 Card {
                     SectionTitle("导入复筛结果")
-                    Text("选择在 Excel 编辑过的 CSV，标注会写回数据库。")
+                    Text("选择已在外部编辑的复筛 CSV，将标注写回数据库。")
                         .font(.system(size: 13)).foregroundStyle(Theme.muted)
                     Button("选择 CSV 导入…") {
                         if let url = FolderPicker.pickCSV() { app.importCSV(url) }
@@ -86,7 +76,7 @@ struct DataView: View {
     private var databaseCard: some View {
         Card {
             SectionTitle("数据库")
-            Text(verbatim: "整库可备份导出、从别处导入合并、或清空。导出为新格式 .db，可在另一台机器或新项目里导入接续。")
+            Text(verbatim: "支持整库备份导出，或从其他库导入合并。导出为标准 .db 格式，可在其他设备或项目中导入接续。")
                 .font(.system(size: 13)).foregroundStyle(Theme.muted)
             HStack(spacing: 8) {
                 Button("导出数据库（备份）") {
@@ -97,23 +87,24 @@ struct DataView: View {
                     if let src = FolderPicker.pickDB() { app.beginImport(from: src, strategy: .skipExisting) }
                 }.buttonStyle(OutlineButtonStyle())
             }
-            Text(verbatim: "导入默认跳过已有文章、不覆盖你的翻译与分类，且导入前自动备份为 .db.bak。若源库含分类问题，会先让你手动对齐。")
+            Text(verbatim: "导入默认跳过已有文章，不覆盖现有翻译与分类，并在导入前自动备份为 .db.bak。源库若包含分类问题，需先手动对齐问题列。")
                 .font(.system(size: 12)).foregroundStyle(Theme.muted)
             Button("高级导入：仅填补空缺字段…") {
                 if let src = FolderPicker.pickDB() { app.beginImport(from: src, strategy: .fillEmpty) }
             }
             .buttonStyle(.plain).font(.system(size: 13)).foregroundStyle(Theme.accent)
-            .help("已有文章保留，只把当前为空的字段用导入值补上")
+            .help("保留已有文章，仅以导入值填补当前为空的字段")
             Divider().overlay(Theme.line).padding(.vertical, 2)
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("清空当前项目").font(.system(size: 14, weight: .medium)).foregroundStyle(Theme.red)
-                    Text(verbatim: "删除本项目数据库中的全部文章，保留配置与列结构。不可恢复。")
+            Expander("清空数据库") {
+                VStack(alignment: .leading, spacing: 10) {
+                    Label("此操作将永久删除全部文章，不可恢复", systemImage: "exclamationmark.triangle.fill")
+                        .font(.system(size: 13, weight: .medium)).foregroundStyle(Theme.red)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(verbatim: "保留配置与列结构，仅清空文章数据。")
                         .font(.system(size: 12)).foregroundStyle(Theme.muted)
+                    Button("清空数据库") { clearConfirm = ""; showClear = true }
+                        .buttonStyle(.bordered).controlSize(.large).tint(Theme.red)
                 }
-                Spacer()
-                Button("清空…") { clearConfirm = ""; showClear = true }
-                    .buttonStyle(OutlineButtonStyle())
             }
         }
     }
@@ -153,23 +144,46 @@ struct DataView: View {
         return items
     }
 
-    @ViewBuilder private func statGroup(_ title: String, _ items: [(String, Int, Color)]) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title).font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.muted)
-            if items.allSatisfy({ $0.1 == 0 }) && title == "处理进度" {
-                HStack(spacing: 6) {
-                    Image(systemName: "checkmark.circle.fill").foregroundStyle(Theme.green)
-                    Text("全部处理完成").font(.system(size: 14)).foregroundStyle(Theme.green)
-                }.padding(.vertical, 4)
-            } else {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 130), spacing: 12)], alignment: .leading, spacing: 12) {
-                    ForEach(items, id: \.0) { item in
-                        StatCard(value: item.1, label: item.0, color: item.2)
-                    }
-                }
-            }
+    // 导出范围：一排带计数的可点选芯片，与状态区的数据卡片对应。
+    private var scopeChips: some View {
+        HStack(spacing: 8) {
+            ScopeChip(label: "待复筛", count: app.stats["reviewed_pending"] ?? 0,
+                      selected: filter == "pending") { filter = "pending" }
+            ScopeChip(label: "纳入", count: app.stats["reviewed_yes"] ?? 0,
+                      selected: filter == "included") { filter = "included" }
+            ScopeChip(label: "排除", count: app.stats["reviewed_no"] ?? 0,
+                      selected: filter == "excluded") { filter = "excluded" }
+            ScopeChip(label: "全部", count: app.stats["total"] ?? 0,
+                      selected: filter == "all") { filter = "all" }
+            Spacer(minLength: 0)
         }
-        .padding(.top, 4)
+    }
+
+    // 复筛漏斗：总数 + 待复筛/纳入/排除（后三者之和 = 总数），一排数字卡片。
+    private var reviewFunnel: some View {
+        HStack(spacing: 12) {
+            StatCard(value: app.stats["total"] ?? 0, label: "总文章数", color: Theme.accent)
+            StatCard(value: app.stats["reviewed_pending"] ?? 0, label: "待复筛", color: Theme.amber)
+            StatCard(value: app.stats["reviewed_yes"] ?? 0, label: "纳入", color: Theme.green)
+            StatCard(value: app.stats["reviewed_no"] ?? 0, label: "排除", color: Theme.red)
+        }
+    }
+
+    // 处理进度（待译/待分类，待办类）：默认收进折叠区。
+    @ViewBuilder private var processingProgress: some View {
+        let items = progressItems
+        if items.allSatisfy({ $0.1 == 0 }) {
+            HStack(spacing: 6) {
+                Image(systemName: "checkmark.circle.fill").foregroundStyle(Theme.green)
+                Text("全部处理完成").font(.system(size: 14)).foregroundStyle(Theme.green)
+            }.padding(.top, 4)
+        } else {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 130), spacing: 12)], alignment: .leading, spacing: 12) {
+                ForEach(items, id: \.0) { item in
+                    StatCard(value: item.1, label: item.0, color: item.2)
+                }
+            }.padding(.top, 4)
+        }
     }
 }
 
@@ -181,7 +195,7 @@ struct ImportMappingSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("导入对齐").font(.system(size: 17, weight: .bold))
-            Text(verbatim: "源库共 \(plan.total) 篇。文献本体与人工标注（include/tags）会自动合并；下面的分类问题请逐个选择如何对齐——这一步不会默认对齐，避免把含义不同的问题列合到一起。")
+            Text(verbatim: "源库共 \(plan.total) 篇。文献本体与人工标注（include/tags）将自动合并。以下分类问题需逐个指定对齐方式，未指定的问题列不会合并。")
                 .font(.system(size: 13)).foregroundStyle(Theme.muted).fixedSize(horizontal: false, vertical: true)
 
             ScrollView {
@@ -222,6 +236,32 @@ struct ImportMappingSheet: View {
         .background(Theme.panel2.opacity(0.5))
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.line, lineWidth: 1))
         .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+// 带计数的可点选范围芯片：选中=靛蓝填充，未选=描边。
+struct ScopeChip: View {
+    let label: String
+    let count: Int
+    let selected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Text(label).font(.system(size: 13, weight: .medium))
+                Text("\(count)").font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(selected ? Color.white.opacity(0.9) : Theme.muted)
+            }
+            .padding(.horizontal, 12).padding(.vertical, 7)
+            .foregroundStyle(selected ? Color.white : Theme.fg)
+            .background(selected ? Theme.accent : Color.clear)
+            .overlay(RoundedRectangle(cornerRadius: 8)
+                .stroke(selected ? Color.clear : Theme.line, lineWidth: 1))
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain).focusable(false)
     }
 }
 

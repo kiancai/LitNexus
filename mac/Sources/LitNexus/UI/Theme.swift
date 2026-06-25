@@ -100,13 +100,14 @@ struct Expander<Content: View>: View {
             Button {
                 withAnimation(.easeInOut(duration: 0.15)) { expanded.toggle() }
             } label: {
-                HStack {
-                    Text(title).font(.system(size: 15, weight: .medium)).foregroundStyle(Theme.fg)
-                    Spacer()
-                    Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold))
+                HStack(spacing: 7) {
+                    Image(systemName: "chevron.right").font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(Theme.muted)
                         .rotationEffect(.degrees(expanded ? 90 : 0))
+                    Text(title).font(.system(size: 14, weight: .medium)).foregroundStyle(Theme.fg)
+                    Spacer(minLength: 0)
                 }
+                .padding(.vertical, 2)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain).focusable(false)
