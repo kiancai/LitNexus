@@ -8,6 +8,16 @@ enum Page: String, CaseIterable { case run = "运行", data = "数据", stats = 
 
 struct StatDimension: Identifiable, Equatable { var id: String { column }; let label: String; let column: String }
 
+// 某问题 AI 答案与人工裁决的一致性 + 分歧示例。
+struct QAgreement {
+    let question: Question
+    let tp: Int, fp: Int, fn: Int, tn: Int          // tp:AI是/纳入 fp:AI是/排除 fn:AI否/纳入 tn:AI否/排除
+    let falseNeg: [(title: String, reason: String)] // AI 漏判：AI 判否、你纳入
+    let falsePos: [(title: String, reason: String)] // AI 误纳：AI 判是、你排除
+    var reviewed: Int { tp + fp + fn + tn }
+    var agreeRate: Double { reviewed > 0 ? Double(tp + tn) / Double(reviewed) : 0 }
+}
+
 struct StatsBundle {
     var overview: [String: Int] = [:]
     var dimensions: [StatDimension] = []                                       // 年代图可选维度
@@ -15,6 +25,10 @@ struct StatsBundle {
     var sources: [(value: String?, count: Int)] = []
     var questions: [(question: Question, yes: Int, no: Int, na: Int, pending: Int)] = []
     var topJournals: [(value: String, count: Int)] = []
+    var journalRank: [JournalStat] = []      // ① 入选率榜（已复筛达阈值，按入选率排序）
+    var suggestAdd: [JournalStat] = []        // ② 建议加入期刊列表
+    var suggestPrune: [JournalStat] = []      // ② 建议精简
+    var agreements: [QAgreement] = []         // ④ AI vs 人工一致性
 }
 
 enum StepStatus { case idle, running, success, failed }
@@ -766,6 +780,25 @@ final class AppState: ObservableObject {
                     }
                 }
                 b.questions.append((q, yes, no, na, pending))
+            }
+
+            // ① 期刊入选率榜 + ② 期刊列表反哺
+            let jstats = (try? db.journalStats()) ?? []
+            b.journalRank = jstats.filter { $0.reviewed >= 5 }
+                .sorted { ($0.rate, $0.included) > ($1.rate, $1.included) }
+            let listSet = Set(EPMCClient.filterQueries(cfg.download.journals).map { $0.lowercased() })
+            b.suggestAdd = jstats.filter { !listSet.contains($0.journal.lowercased()) && $0.included >= 2 }
+                .sorted { $0.included > $1.included }
+            b.suggestPrune = jstats.filter { listSet.contains($0.journal.lowercased()) && $0.reviewed >= 5 && $0.included == 0 }
+                .sorted { $0.total > $1.total }
+
+            // ④ AI vs 人工一致性
+            for q in cfg.classify.questions {
+                guard let a = try? db.questionAgreement(q.id), a.tp + a.fp + a.fn + a.tn > 0 else { continue }
+                let fn = (try? db.disagreementExamples(q.id, aiAnswer: "否", include: "yes", limit: 5)) ?? []
+                let fp = (try? db.disagreementExamples(q.id, aiAnswer: "是", include: "no", limit: 5)) ?? []
+                b.agreements.append(QAgreement(question: q, tp: a.tp, fp: a.fp, fn: a.fn, tn: a.tn,
+                                               falseNeg: fn, falsePos: fp))
             }
 
             DispatchQueue.main.async { completion(b) }

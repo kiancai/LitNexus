@@ -22,6 +22,16 @@ enum DBValue {
     }
 }
 
+// 期刊维度统计：用于入选率榜与期刊列表反哺。
+struct JournalStat {
+    let journal: String
+    let total: Int
+    let included: Int
+    let excluded: Int
+    var reviewed: Int { included + excluded }
+    var rate: Double { reviewed > 0 ? Double(included) / Double(reviewed) : 0 }
+}
+
 enum DBError: Error, LocalizedError {
     case open(String)
     case sql(String)
@@ -515,6 +525,64 @@ final class Database {
             guard let v = $0["v"]?.stringValue else { return nil }
             return (v, $0["c"]?.intValue ?? 0)
         }
+    }
+
+    // ── 统计洞察（按期刊/问题聚合）──────────────────────────────────────────────
+
+    /// 每个期刊的总数 / 纳入 / 排除（基于 include 列）。
+    func journalStats() throws -> [JournalStat] {
+        guard try hasColumn("include") else { return [] }
+        let r = try query("""
+            SELECT journal_title AS j, COUNT(*) AS total,
+                   SUM(CASE WHEN include = 'yes' THEN 1 ELSE 0 END) AS inc,
+                   SUM(CASE WHEN include = 'no'  THEN 1 ELSE 0 END) AS exc
+            FROM articles
+            WHERE journal_title IS NOT NULL AND journal_title != ''
+            GROUP BY j
+            """)
+        return r.rows.compactMap { row in
+            guard let j = row["j"]?.stringValue else { return nil }
+            return JournalStat(journal: j, total: row["total"]?.intValue ?? 0,
+                               included: row["inc"]?.intValue ?? 0, excluded: row["exc"]?.intValue ?? 0)
+        }
+    }
+
+    /// 某问题的 AI 答案 × 人工复筛 混淆计数（仅已复筛且有答案）。
+    /// 返回 tp(AI是/纳入) fp(AI是/排除) fn(AI否/纳入) tn(AI否/排除)。
+    func questionAgreement(_ qid: String) throws -> (tp: Int, fp: Int, fn: Int, tn: Int)? {
+        guard Identifier.isValid(qid), try hasColumn("\(qid)_ans"), try hasColumn("include") else { return nil }
+        let a = "\(qid)_ans"
+        let r = try query("""
+            SELECT \(a) AS ans, include AS inc, COUNT(*) AS c
+            FROM articles
+            WHERE include IS NOT NULL AND \(a) IS NOT NULL
+            GROUP BY ans, inc
+            """)
+        var tp = 0, fp = 0, fn = 0, tn = 0
+        for row in r.rows {
+            let c = row["c"]?.intValue ?? 0
+            switch (row["ans"]?.stringValue, row["inc"]?.stringValue) {
+            case ("是", "yes"): tp = c
+            case ("是", "no"):  fp = c
+            case ("否", "yes"): fn = c
+            case ("否", "no"):  tn = c
+            default: break
+            }
+        }
+        return (tp, fp, fn, tn)
+    }
+
+    /// 取 AI 答案与人工裁决分歧的示例（标题 + AI 理由）。
+    func disagreementExamples(_ qid: String, aiAnswer: String, include: String, limit: Int) throws
+        -> [(title: String, reason: String)] {
+        guard Identifier.isValid(qid), try hasColumn("\(qid)_ans") else { return [] }
+        let r = try query("""
+            SELECT title AS t, \(qid)_rea AS r
+            FROM articles
+            WHERE \(qid)_ans = ? AND include = ? AND title IS NOT NULL AND title != ''
+            LIMIT \(max(1, limit))
+            """, [.text(aiAnswer), .text(include)])
+        return r.rows.map { ($0["t"]?.stringValue ?? "", $0["r"]?.stringValue ?? "") }
     }
 
     // ── Schema SQL ────────────────────────────────────────────────────────────

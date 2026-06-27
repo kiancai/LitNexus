@@ -23,7 +23,6 @@ struct DataView: View {
                             .font(.system(size: 13)).foregroundStyle(Theme.muted)
                     } else {
                         reviewFunnel
-                        Expander("处理进度") { processingProgress }
                     }
                 }
 
@@ -131,19 +130,6 @@ struct DataView: View {
         .padding(24).frame(width: 460).background(Theme.panel)
     }
 
-    // 处理进度（待办类）：待译标题/摘要、各启用问题的待分类数。
-    private var progressItems: [(String, Int, Color)] {
-        var items: [(String, Int, Color)] = []
-        items.append(("待译标题", app.stats["pending_translation"] ?? 0, Theme.cyan))
-        if app.stats["pending_abstract_translation"] != nil {
-            items.append(("待译摘要", app.stats["pending_abstract_translation"] ?? 0, Theme.cyan))
-        }
-        for q in app.config.classify.questions where q.classify {
-            if let v = app.stats["pending_\(q.id)"] { items.append(("待分类 \(q.displayName)", v, Theme.cyan)) }
-        }
-        return items
-    }
-
     // 导出范围：一排带计数的可点选芯片，与状态区的数据卡片对应。
     private var scopeChips: some View {
         HStack(spacing: 8) {
@@ -169,22 +155,6 @@ struct DataView: View {
         }
     }
 
-    // 处理进度（待译/待分类，待办类）：默认收进折叠区。
-    @ViewBuilder private var processingProgress: some View {
-        let items = progressItems
-        if items.allSatisfy({ $0.1 == 0 }) {
-            HStack(spacing: 6) {
-                Image(systemName: "checkmark.circle.fill").foregroundStyle(Theme.green)
-                Text("全部处理完成").font(.system(size: 14)).foregroundStyle(Theme.green)
-            }.padding(.top, 4)
-        } else {
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 130), spacing: 12)], alignment: .leading, spacing: 12) {
-                ForEach(items, id: \.0) { item in
-                    StatCard(value: item.1, label: item.0, color: item.2)
-                }
-            }.padding(.top, 4)
-        }
-    }
 }
 
 // 导入数据库时，把源库的问题列人工对齐到当前问题（或新建/不导入）。
