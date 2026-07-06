@@ -231,6 +231,24 @@ enum SelfTest {
             check("宽容解析：野引号不吞行（3 行）", mrows.count == 3)
             check("宽容解析：裸引号字段保真", mrows[1][1] == "P2\"specificity here")
             check("宽容解析：后续行完整", mrows[2] == ["q", "r", "s"])
+
+            // 检索渠道 article_terms：同一篇被期刊+关键词命中应各记一条（不因文章去重而丢渠道）
+            let chDB = try Database(path: tmp.appendingPathComponent("ch.db"), config: cfg)
+            let chDL = tmp.appendingPathComponent("ch_downloads")
+            try FileManager.default.createDirectory(at: chDL, withIntermediateDirectories: true)
+            try "{\"id\":\"K1\",\"pmid\":\"600\",\"title\":\"t1\",\"query_search_term\":\"Nature\"}"
+                .write(to: chDL.appendingPathComponent("epmc_journals_t.jsonl"), atomically: true, encoding: .utf8)
+            try ["{\"id\":\"K1\",\"pmid\":\"600\",\"title\":\"t1\",\"query_search_term\":\"kw alpha\"}",
+                 "{\"id\":\"K2\",\"pmid\":\"601\",\"title\":\"t2\",\"query_search_term\":\"kw alpha\"}"]
+                .joined(separator: "\n")
+                .write(to: chDL.appendingPathComponent("epmc_keywords_t.jsonl"), atomically: true, encoding: .utf8)
+            _ = try Pipeline.mergeJSONL(db: chDB, downloadsDir: chDL, reporter: nil)
+            check("渠道：多渠道累积=3（K1×期刊/关键词 + K2×关键词）", try chDB.articleTermsCount() == 3)
+            check("渠道：关键词产出 kw alpha total=2",
+                  try chDB.keywordTermStats().contains { $0.term == "kw alpha" && $0.total == 2 })
+            let rb = try Pipeline.rebuildArticleTerms(db: chDB, downloadsDir: chDL, reporter: nil)
+            check("渠道：从 _merged 重建后命中对仍=3", try chDB.articleTermsCount() == 3)
+            check("渠道：重建处理文件=2", rb.files == 2)
         } catch {
             failed += 1
             print("  ✗ 异常：\(error)")

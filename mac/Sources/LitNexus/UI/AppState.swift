@@ -29,6 +29,8 @@ struct StatsBundle {
     var suggestAdd: [JournalStat] = []        // ② 建议加入期刊列表
     var suggestPrune: [JournalStat] = []      // ② 建议精简
     var agreements: [QAgreement] = []         // ④ AI vs 人工一致性
+    var keywordTerms: [(term: String, total: Int, included: Int, uniqueIncluded: Int)] = []  // ③ 检索词产出
+    var channelMapBuilt = false               // article_terms 是否已建立
 }
 
 enum StepStatus { case idle, running, success, failed }
@@ -155,6 +157,7 @@ final class AppState: ObservableObject {
     @Published var logLines: [String] = []
     @Published var isRunning = false
     @Published var isCancelling = false
+    @Published var rebuildingChannels = false
     private var cancelToken: CancelToken?
     @Published var stats: [String: Int] = [:]
     @Published var toast: String?
@@ -230,6 +233,40 @@ final class AppState: ObservableObject {
             get: { self.config.classify.questions[idx] },
             set: { self.config.classify.questions[idx] = $0; self.persistConfig() }
         )
+    }
+
+    /// 该问题是否已有 AI 答案（决定改文本时是否需要知情确认）。
+    func questionHasAnswers(_ id: String) -> Bool {
+        guard let ws = workspace else { return false }
+        return ((try? Database(path: ws.dbPath, config: config).answerCount(id)) ?? 0) > 0
+    }
+
+    /// 就地更新问题文本并持久化。
+    func updateQuestionText(_ id: String, _ text: String) {
+        guard let i = config.classify.questions.firstIndex(where: { $0.id == id }) else { return }
+        config.classify.questions[i].text = text
+        persistConfig()
+    }
+
+    /// 清空某问题的全部旧答案（改文本且语义变化时用，下次分类重跑）。
+    func clearQuestionAnswers(_ id: String) {
+        guard let ws = workspace else { return }
+        try? Database(path: ws.dbPath, config: config).clearClassification(id)
+        refreshStats()
+    }
+
+    /// 退役旧问题（停用 AI 处理、保留列与数据作历史）+ 用新文本新建一个独立问题。
+    func replaceQuestionWithNew(oldId: String, newText: String) {
+        var nickname = ""
+        if let i = config.classify.questions.firstIndex(where: { $0.id == oldId }) {
+            config.classify.questions[i].classify = false   // 冻结旧问题
+            nickname = config.classify.questions[i].nickname
+        }
+        let newId = config.classify.nextQuestionID()
+        config.classify.questions.append(Question(id: newId, nickname: nickname, text: newText, classify: true, export: true))
+        persistConfig()
+        if let ws = workspace { _ = try? Database(path: ws.dbPath, config: config) }  // 补齐新问题动态列
+        refreshStats()
     }
 
     /// 永久删除问题：从配置移除 + DROP 掉 {id}_ans/{id}_rea 两列及数据。不可恢复。
@@ -740,6 +777,26 @@ final class AppState: ObservableObject {
 
     // ── 统计页数据计算 ──────────────────────────────────────────────────────────
 
+    /// 重建检索渠道（扫 _merged/*.jsonl 重灌 article_terms），完成后回调（供刷新统计）。
+    func rebuildChannelMap(_ completion: @escaping () -> Void = {}) {
+        guard let ws = workspace, !rebuildingChannels else { return }
+        let cfg = config
+        rebuildingChannels = true
+        DispatchQueue.global().async {
+            var msg = "检索渠道已重建"
+            if let db = try? Database(path: ws.dbPath, config: cfg) {
+                if let r = try? Pipeline.rebuildArticleTerms(db: db, downloadsDir: ws.downloadsDir, reporter: nil) {
+                    msg = "检索渠道已重建：\(r.files) 个文件、\(r.pairs) 条命中"
+                } else { msg = "重建失败" }
+            } else { msg = "重建失败：无法打开数据库" }
+            DispatchQueue.main.async {
+                self.rebuildingChannels = false
+                self.toast = msg
+                completion()
+            }
+        }
+    }
+
     func computeStats(_ completion: @escaping (StatsBundle?) -> Void) {
         guard let ws = workspace, FileManager.default.fileExists(atPath: ws.dbPath.path) else {
             completion(nil); return
@@ -800,6 +857,10 @@ final class AppState: ObservableObject {
                 b.agreements.append(QAgreement(question: q, tp: a.tp, fp: a.fp, fn: a.fn, tn: a.tn,
                                                falseNeg: fn, falsePos: fp))
             }
+
+            // ③ 检索词产出
+            b.channelMapBuilt = ((try? db.articleTermsCount()) ?? 0) > 0
+            b.keywordTerms = (try? db.keywordTermStats()) ?? []
 
             DispatchQueue.main.async { completion(b) }
         }

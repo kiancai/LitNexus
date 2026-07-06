@@ -168,7 +168,7 @@ struct QuestionsCard: View {
                 .font(.system(size: 13)).foregroundStyle(Theme.muted)
 
             ForEach(app.config.classify.questions) { q in
-                if let binding = app.questionBinding(q.id) { editor(binding) }
+                QuestionEditor(id: q.id, pendingDelete: $pendingDelete)
             }
 
             Button("添加问题") { app.addQuestion() }.buttonStyle(OutlineButtonStyle())
@@ -184,31 +184,78 @@ struct QuestionsCard: View {
             Text(verbatim: "将连同该问题已有的全部答案与理由一并永久删除，无法恢复。若只是暂时不想用，请改为关闭「AI 处理」。")
         }
     }
+}
 
-    @ViewBuilder private func editor(_ q: Binding<Question>) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                TextField("昵称（导出表头）", text: q.nickname).textFieldStyle(.plain).lineLimit(1)
-                    .padding(7).background(Theme.panel2).clipShape(RoundedRectangle(cornerRadius: 6))
-                    .frame(maxWidth: 220)
-                Spacer()
-                Text(verbatim: "标识 \(q.wrappedValue.id)").font(.system(size: 11)).foregroundStyle(Theme.muted)
-                Button { pendingDelete = q.wrappedValue } label: { Image(systemName: "trash") }
-                    .buttonStyle(.plain).foregroundStyle(Theme.red).help("永久删除该问题及其数据")
+// 单个分类问题的编辑器。文本改动走「草稿 + 显式保存」，已有答案时弹知情确认，
+// 避免直接改文本把旧答案悄悄重解释成新问题的答案。
+struct QuestionEditor: View {
+    @EnvironmentObject var app: AppState
+    let id: String
+    @Binding var pendingDelete: Question?
+
+    @State private var draft = ""
+    @State private var loaded = false
+    @State private var showGate = false
+
+    private var question: Question? { app.config.classify.questions.first { $0.id == id } }
+
+    var body: some View {
+        if let q = question, let binding = app.questionBinding(id) {
+            let dirty = draft != q.text
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    TextField("昵称（导出表头）", text: binding.nickname).textFieldStyle(.plain).lineLimit(1)
+                        .padding(7).background(Theme.panel2).clipShape(RoundedRectangle(cornerRadius: 6))
+                        .frame(maxWidth: 220)
+                    Spacer()
+                    Text(verbatim: "标识 \(q.id)").font(.system(size: 11)).foregroundStyle(Theme.muted)
+                    Button { pendingDelete = q } label: { Image(systemName: "trash") }
+                        .buttonStyle(.plain).foregroundStyle(Theme.red).help("永久删除该问题及其数据")
+                }
+
+                TextEditor(text: $draft)
+                    .font(.system(size: 13, design: .monospaced)).scrollContentBackground(.hidden)
+                    .padding(6).frame(height: 80)
+                    .background(Theme.panel2).clipShape(RoundedRectangle(cornerRadius: 8))
+
+                if dirty {
+                    HStack(spacing: 8) {
+                        Text("问题文本已修改").font(.system(size: 12)).foregroundStyle(Theme.amber)
+                        Spacer()
+                        Button("放弃") { draft = q.text }.buttonStyle(.bordered).controlSize(.small)
+                        Button("保存修改") { trySave(q) }
+                            .buttonStyle(.borderedProminent).controlSize(.small).tint(Theme.accent)
+                    }
+                }
+
+                HStack(spacing: 18) {
+                    Toggle("AI 处理", isOn: binding.classify).toggleStyle(.checkbox)
+                    Toggle("导出到 CSV", isOn: binding.export).toggleStyle(.checkbox)
+                }.font(.system(size: 13)).foregroundStyle(Theme.fg)
             }
-            TextEditor(text: q.text)
-                .font(.system(size: 13, design: .monospaced)).scrollContentBackground(.hidden)
-                .padding(6).frame(height: 80)
-                .background(Theme.panel2).clipShape(RoundedRectangle(cornerRadius: 8))
-            HStack(spacing: 18) {
-                Toggle("AI 处理", isOn: q.classify).toggleStyle(.checkbox)
-                Toggle("导出到 CSV", isOn: q.export).toggleStyle(.checkbox)
-            }.font(.system(size: 13)).foregroundStyle(Theme.fg)
+            .padding(12)
+            .background(Theme.panel2.opacity(0.5))
+            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.line, lineWidth: 1))
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .onAppear { if !loaded { draft = q.text; loaded = true } }
+            .confirmationDialog("该问题已有答案，如何处理这次文本修改？", isPresented: $showGate, titleVisibility: .visible) {
+                Button("新建为新问题（推荐）") {
+                    app.replaceQuestionWithNew(oldId: id, newText: draft); draft = q.text
+                }
+                Button("就地修改并清空旧答案", role: .destructive) {
+                    app.updateQuestionText(id, draft); app.clearQuestionAnswers(id)
+                }
+                Button("仅措辞微调，保留旧答案") { app.updateQuestionText(id, draft) }
+                Button("取消", role: .cancel) {}
+            } message: {
+                Text(verbatim: "旧答案由改动前的问题文本产生。若标准变了，建议新建为新问题（旧问题会停用、保留作历史），或清空旧答案重跑；仅当是措辞微调时才保留旧答案。")
+            }
         }
-        .padding(12)
-        .background(Theme.panel2.opacity(0.5))
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.line, lineWidth: 1))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func trySave(_ q: Question) {
+        if app.questionHasAnswers(id) { showGate = true }
+        else { app.updateQuestionText(id, draft) }
     }
 }
 

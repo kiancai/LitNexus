@@ -27,18 +27,19 @@ extension Color {
     }
 }
 
+// 暖石墨（warm graphite / stone）+ 青绿（teal）强调。中性偏暖、更耐看；强调色克制单一。
 enum Theme {
-    static let bg = Color.dynamic(light: 0xF6F6F7, dark: 0x0A0A0B)
-    static let panel = Color.dynamic(light: 0xFFFFFF, dark: 0x18181B)
-    static let panel2 = Color.dynamic(light: 0xEDEDEF, dark: 0x1F1F23)
-    static let line = Color.dynamic(light: 0xE3E3E6, dark: 0x27272A)
-    static let fg = Color.dynamic(light: 0x18181B, dark: 0xFAFAFA)
-    static let muted = Color.dynamic(light: 0x71717A, dark: 0xA1A1AA)
-    static let accent = Color.dynamic(light: 0x4F46E5, dark: 0x6366F1)
-    static let green = Color.dynamic(light: 0x059669, dark: 0x10B981)
+    static let bg = Color.dynamic(light: 0xFAF9F7, dark: 0x1A1816)
+    static let panel = Color.dynamic(light: 0xFFFFFF, dark: 0x232120)
+    static let panel2 = Color.dynamic(light: 0xF1EFEC, dark: 0x2C2A27)
+    static let line = Color.dynamic(light: 0xE7E3DE, dark: 0x39342F)
+    static let fg = Color.dynamic(light: 0x1C1917, dark: 0xF5F4F2)
+    static let muted = Color.dynamic(light: 0x78716C, dark: 0xA8A29E)
+    static let accent = Color.dynamic(light: 0x0D9488, dark: 0x2DD4BF)   // teal
+    static let green = Color.dynamic(light: 0x059669, dark: 0x10B981)    // 纳入/成功，翡翠绿，与 teal 同family更和谐
     static let amber = Color.dynamic(light: 0xD97706, dark: 0xF59E0B)
     static let red = Color.dynamic(light: 0xDC2626, dark: 0xEF4444)
-    static let cyan = Color.dynamic(light: 0x0891B2, dark: 0x22D3EE)
+    static let cyan = Color.dynamic(light: 0x0F766E, dark: 0x5EEAD4)     // 日志分组标题，并入 teal 家族
     static let radius: CGFloat = 12
 }
 

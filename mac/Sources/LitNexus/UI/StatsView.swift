@@ -26,6 +26,7 @@ struct StatsView: View {
                     journalRankCard(b)
                     journalSuggestCard(b)
                     agreementCard(b)
+                    keywordCard(b)
                     yearCard(b)
                     sourceCard(b)
                     questionsCard(b)
@@ -133,6 +134,52 @@ struct StatsView: View {
             }
         }
         return segs
+    }
+
+    // ── ③ 检索词产出 ────────────────────────────────────────────────────────────
+
+    private func keywordCard(_ b: StatsBundle) -> some View {
+        Card {
+            HStack {
+                SectionTitle("检索词产出")
+                Spacer()
+                Button {
+                    app.rebuildChannelMap { load() }
+                } label: {
+                    if app.rebuildingChannels {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Text(b.channelMapBuilt ? "重建" : "重建检索渠道").font(.system(size: 13))
+                    }
+                }
+                .buttonStyle(.bordered).controlSize(.small).disabled(app.rebuildingChannels)
+                .help("扫描已下载文件重建检索渠道数据，无需重新下载")
+            }
+            Text(verbatim: "各关键词命中数 / 纳入数 / 独有纳入（仅此检索式命中、别处未命中）。独有纳入≈0 且命中多，说明可被其他检索式替代。")
+                .font(.system(size: 12)).foregroundStyle(Theme.muted)
+
+            if !b.channelMapBuilt {
+                Text("尚未建立检索渠道数据。点右上「重建检索渠道」从已下载文件重建。")
+                    .font(.system(size: 13)).foregroundStyle(Theme.muted)
+            } else if b.keywordTerms.isEmpty {
+                Text("暂无关键词命中数据。").font(.system(size: 13)).foregroundStyle(Theme.muted)
+            } else {
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(Array(b.keywordTerms.prefix(20).enumerated()), id: \.offset) { _, t in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(t.term).font(.system(size: 12, weight: .medium)).lineLimit(1).help(t.term)
+                            HStack(spacing: 14) {
+                                Text("命中 \(t.total)")
+                                Text("纳入 \(t.included)")
+                                Text("独有纳入 \(t.uniqueIncluded)")
+                                    .foregroundStyle(t.uniqueIncluded == 0 && t.included > 0 ? Theme.amber : Theme.muted)
+                            }
+                            .font(.system(size: 11)).foregroundStyle(Theme.muted)
+                        }
+                    }
+                }
+            }
+        }
     }
 
     // ── ② 来源构成 ──────────────────────────────────────────────────────────────

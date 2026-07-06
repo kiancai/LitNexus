@@ -244,13 +244,34 @@ enum AIClient {
             + "{\n" + lines + "\n}"
     }
 
+    /// 把 AI 返回的 answer 归一化为「是」/「否」/「N/A」。
+    /// 剥除控制字符与空白后精确匹配；无法识别返回 nil（视为未答，本次不落库，下次自动重试）。
+    /// 防止模型偶发幻觉（吐控制字符、解释性文字如「API说明」）污染 qN_ans 列。
+    static func normalizeAnswer(_ raw: String?) -> String? {
+        guard let raw else { return nil }
+        let cleaned = String(raw.unicodeScalars.filter { $0.value >= 0x20 }.map { Character($0) })
+        let s = cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
+        if s.isEmpty { return nil }
+        switch s {
+        case "是", "是。", "是.", "是．", "Yes", "YES", "yes", "Y", "y": return "是"
+        case "否", "否。", "否.", "否．", "No", "NO", "no", "N", "n": return "否"
+        case "N/A", "NA", "n/a", "无", "不适用": return "N/A"
+        default:
+            // 兼容「是的」「否，因为…」等前缀式回答；「API说明」等不以是/否开头 → nil
+            if s.hasPrefix("是") { return "是" }
+            if s.hasPrefix("否") { return "否" }
+            return nil
+        }
+    }
+
     static func parseClassifyResponse(_ content: String, questions: [Question]) -> [String: (answer: String, reason: String)] {
         func extract(_ obj: Any?) -> [String: (String, String)] {
             guard let dict = obj as? [String: Any] else { return [:] }
             var out: [String: (String, String)] = [:]
             for q in questions {
-                if let qd = dict[q.id] as? [String: Any] {
-                    out[q.id] = ((qd["answer"] as? String) ?? "", (qd["reason"] as? String) ?? "")
+                if let qd = dict[q.id] as? [String: Any],
+                   let a = normalizeAnswer(qd["answer"] as? String) {
+                    out[q.id] = (a, (qd["reason"] as? String) ?? "")
                 }
             }
             return out
@@ -316,7 +337,8 @@ enum AIClient {
                 guard let lid = localID, let epmc = idToEpmc[lid] else { continue }
                 var res: QResults = [:]
                 for q in questions {
-                    if let qd = item[q.id] as? [String: Any], let a = qd["answer"] as? String, !a.isEmpty {
+                    guard let qd = item[q.id] as? [String: Any] else { continue }
+                    if let a = normalizeAnswer(qd["answer"] as? String) {
                         res[q.id] = (a, (qd["reason"] as? String) ?? "")
                     }
                 }

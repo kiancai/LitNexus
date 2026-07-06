@@ -31,6 +31,9 @@ enum Pipeline {
                 if case .text = parsed["epmc_id"] { batch.append(parsed) } else { fileErrors += 1 }
             }
             let (i, s) = try db.insertArticles(batch)
+            // 累积检索渠道：本文件里每篇的 (epmc_id, query_search_term, kind)。kind 由文件名判断。
+            let kind = termKind(for: f.lastPathComponent)
+            try? db.insertArticleTerms(termPairs(batch, kind: kind))
             inserted += i; skipped += s; errors += fileErrors
             reporter?.log("  \(f.lastPathComponent): 插入 \(i)，重复 \(s)，错误 \(fileErrors)")
             // 已合并的文件移入 _merged/，避免下次重复导入
@@ -42,6 +45,49 @@ enum Pipeline {
         }
         if let taskID { reporter?.complete(taskID) }
         return MergeResult(inserted: inserted, skipped: skipped, errors: errors, files: files.count)
+    }
+
+    /// 从文件名判断检索渠道类型。
+    static func termKind(for filename: String) -> String {
+        if filename.hasPrefix("epmc_keywords") { return "keyword" }
+        if filename.hasPrefix("epmc_journals") { return "journal" }
+        return "unknown"
+    }
+
+    /// 从一批解析后的文章里抽出 (epmc_id, query_search_term, kind) 命中对。
+    static func termPairs(_ batch: [[String: DBValue]], kind: String)
+        -> [(epmcID: String, term: String, kind: String)] {
+        batch.compactMap { art in
+            guard let id = art["epmc_id"]?.stringValue,
+                  let term = art["query_search_term"]?.stringValue, !term.isEmpty else { return nil }
+            return (id, term, kind)
+        }
+    }
+
+    /// 重建检索渠道表：扫描 _merged/*.jsonl 重灌 article_terms（免费补全历史，无需重新下载）。
+    /// 返回处理的文件数与累计命中对数。
+    @discardableResult
+    static func rebuildArticleTerms(db: Database, downloadsDir: URL, reporter: ProgressReporter?) throws
+        -> (files: Int, pairs: Int) {
+        let mergedDir = downloadsDir.appendingPathComponent("_merged")
+        let files = ((try? FileManager.default.contentsOfDirectory(at: mergedDir, includingPropertiesForKeys: nil)) ?? [])
+            .filter { $0.pathExtension == "jsonl" }
+            .sorted { $0.lastPathComponent < $1.lastPathComponent }
+        try db.clearArticleTerms()
+        let taskID = reporter?.addTask("重建检索渠道", total: files.count)
+        var totalPairs = 0
+        for f in files {
+            if reporter?.isCancelled() == true { throw PipelineCancelled() }
+            let kind = termKind(for: f.lastPathComponent)
+            let batch: [[String: DBValue]] = ArticleIO.iterJSONL(f).map { ArticleIO.parseArticle($0) }
+            let pairs = termPairs(batch, kind: kind)
+            try db.insertArticleTerms(pairs)
+            totalPairs += pairs.count
+            reporter?.log("  \(f.lastPathComponent)：\(pairs.count) 条命中")
+            if let taskID { reporter?.update(taskID, advance: 1) }
+        }
+        if let taskID { reporter?.complete(taskID) }
+        return (files.count, totalPairs)
     }
 
     /// 按 filterMode 导出到 CSV，返回行数（0 表示结果为空）。
