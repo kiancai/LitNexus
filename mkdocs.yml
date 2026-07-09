@@ -1,0 +1,90 @@
+# LitNexus 文档站 — MkDocs Material
+# 本地预览:  pip install -r docs/requirements.txt && mkdocs serve
+# 构建:      mkdocs build
+# 线上:      https://kiancai.github.io/LitNexus/
+
+site_name: LitNexus
+site_description: 文献发现与筛选流水线 — 设计、使用与开发文档
+site_url: https://kiancai.github.io/LitNexus/
+repo_url: https://github.com/kiancai/LitNexus
+repo_name: kiancai/LitNexus
+edit_uri: edit/main/docs/
+
+docs_dir: docs
+site_dir: site
+
+theme:
+  name: material
+  language: zh
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: blue
+      toggle:
+        icon: material/brightness-7
+        name: 切换到深色模式
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: blue
+      toggle:
+        icon: material/brightness-4
+        name: 切换到浅色模式
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.action.edit
+    - toc.follow
+  icon:
+    repo: fontawesome/brands/github
+
+plugins:
+  - search:
+      lang:
+        - zh
+        - en
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - tables
+  - toc:
+      permalink: true
+  - attr_list
+  - md_in_html
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/kiancai/LitNexus
+
+nav:
+  - 首页: index.md
+  - 产品:
+      - 概述与动机: product/overview.md
+      - 目标与边界: product/scope.md
+  - 架构:
+      - 总览: architecture/overview.md
+      - 流水线与数据流: architecture/pipeline.md
+      - 工作区与配置: architecture/workspace.md
+      - 数据库: architecture/database.md
+      - 多端策略: architecture/platforms.md
+  - 使用:
+      - 快速开始: guide/quickstart.md
+      - 工作区: guide/workspace.md
+  - 路线图: roadmap.md

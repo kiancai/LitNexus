@@ -35,3 +35,6 @@ __pycache__/
 
 # 本地专用文件
 CLAUDE.md
+
+# MkDocs 构建产物
+site/
