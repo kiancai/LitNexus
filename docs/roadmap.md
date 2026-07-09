@@ -15,38 +15,37 @@
 
 - [x] 选用 MkDocs Material + GitHub Pages
 - [x] 架构/产品骨架页上线
-- [x] 仓库顶层整理：`mac/` · `windows/` · `python/` · `docs/`
-- [x] 删除 `_legacy_data`；Python 降级出主路径
-- [ ] 文档写深，消灭 AGENTS / 旧教程多处各说一套
+- [x] 仓库顶层：`mac/` · `win/` · `docs/`（对称命名）
+- [x] 旧 Python 移出 git（本地 ignore，完成后可删）
+- [ ] 文档写深
 - [x] README 只做门面
 
 ### 阶段 2 — 写清文档，理顺软件目的
 
 - [ ] 产品动机与边界评审（[概述](product/overview.md)、[边界](product/scope.md)）
 - [ ] 流水线、库表、工作区不变量写死
-- [ ] 使用手册按「Mac 桌面为主、CLI 为辅」重写
+- [ ] 使用手册按 Mac 桌面为主重写
 - [ ] 明确 Mac 收尾验收清单（功能 + 交互已定项）
 
 ### 阶段 3 — Mac 收尾
 
 - [ ] 按文档验收 UI 与引擎行为
 - [ ] 发布流程与安装说明定稿
-- [ ] 行为与 Python 参考 / selftest 对齐复核
+- [ ] selftest 对齐复核
 
-### 阶段 4 — Windows
+### 阶段 4 — Windows（`win/`）
 
 - [ ] 按 Mac 定型复刻（C# WPF / .NET Framework 4.8 方向）
 - [ ] selftest 断言移植为验收
 
-## 功能待办（产品，非本文档基建）
+## 功能待办（产品）
 
-见仓库根目录 `TODO.md`（例如检索后按期刊/类型剔除等）。文档阶段结束后，待办应逐步迁入本站「路线图」或独立「变更记录」，避免再次分叉。
+见 [功能备忘](backlog.md)。
 
 ## 有意暂缓
 
 | 项 | 原因 |
 |----|------|
 | Windows 开发 | 等 Mac 定型，避免双端返工 |
-| 删除整个 `python/` | 已降级；Mac/Win 都稳后再考虑物理删除 |
 | Linux 客户端 | 范围外 |
-| 独立品牌官网 | Pages 已够用；以后可同构静态产物换域名 |
+| 独立品牌官网 | Pages 已够用 |

@@ -1,51 +1,33 @@
 # 多端策略
 
-## 为什么离开「仅 Python / NiceGUI」
+## 目标
 
-NiceGUI 本质是 Web 方案：
+轻量原生桌面：双击即开、不捆绑沉重运行时。
 
-- Windows 常依赖 WebView2，Win10 环境不一定齐
-- 打包体积偏大（相对「十几 MB 级原生」目标）
-
-目标：**轻量、优雅、双击即开、不依赖额外运行时**。
-
-## 方案 A：各平台各自重写逻辑
+## 方案 A：各端各自重写
 
 | 平台 | 技术 | 状态 |
 |------|------|------|
-| **Mac** | Swift + SwiftUI，系统 AppKit 渲染 | 引擎完成并自检；UI 基本完整，待文档定型后收尾 |
-| **Windows** | C# + WPF，目标 .NET Framework 4.8 | **暂缓**；Mac 定型后按蓝本复刻 |
-| **Linux** | — | 暂不做 |
-| **Python** | CLI + NiceGUI | **已降级**至 `python/`，非产品路径；仅对照 |
+| **Mac**（`mac/`） | Swift + SwiftUI | 引擎已自检；UI 待文档定型后收尾 |
+| **Windows**（`win/`） | C# + WPF，目标 .NET Framework 4.8 | 目录占位，**暂缓** |
+| **Linux** | — | 不做（现阶段） |
 
-不共享引擎：逻辑简单、有测试标尺，优先最小体积与纯原生。
+不共享跨语言引擎。对齐依据：文档中的磁盘/流水线契约 + Mac `selftest`。
 
 ## Mac 要点
 
-- 不需要完整 Xcode：Command Line Tools + SPM 即可编译
-- 引擎：`mac/Sources/LitNexus/Engine/`（对照 Python core）
-- UI：`mac/Sources/LitNexus/UI/`
-- 自检：`swift run LitNexus selftest`；另有 epmc / AI 联网测试入口
-- 打包：`./make_app.sh release` → `LitNexus.app`
+- SPM + Command Line Tools 即可编译  
+- 打包：`./make_app.sh release`  
+- 已定交互：AI 多方案、设置自动保存、不读环境变量、merge 只处理新文件（`_merged/`）
 
-已定交互（收尾时勿无故推翻，改则先改文档）：
+## Windows 要点
 
-- AI **多方案**模型，编辑即时持久化
-- 设置**自动保存**（无底部大保存按钮）
-- **不读环境变量**
-- 合并**只处理新文件**（`_merged/`）
+- Mac 定型后再做，避免双端同时改  
+- Win10/11 预装运行时方向 → 小体积 exe  
 
-## Windows 要点（规划）
-
-- 等 Mac 功能与形态稳定后再做，避免双端同时改
-- 技术选型动机：.NET Framework 4.8 在 Win10/11 预装 → 小 exe、免装运行时
-- 逻辑与 UI 动线复刻 Mac 定型版 + selftest 断言移植
-
-## 文档与代码的关系
+## 文档与实现
 
 ```text
-本站架构/产品文档  ──决定──►  Mac 收尾范围
-         │
-         └──定型后──►  Windows 复刻
-Mac selftest（主）· python/ 对照（辅）  ──对齐──►  行为不漂移
+本站 ──决定──► Mac 收尾范围 ──定型后──► win 复刻
+Mac selftest ──对齐──► 行为不漂移
 ```

@@ -1,9 +1,15 @@
-# 工作区（用户数据，不应进仓库）
+# 本地 / 非产品（不入库）
+python/
+AGENTS.md
+CLAUDE.md
+.agents/
+
+# 工作区（用户数据）
 *.litnexus-workspace/
 litnexus.db
 litnexus.db-*
 
-# 虚拟环境 / Python 缓存
+# 虚拟环境 / 缓存
 .venv/
 dist/
 build/
@@ -15,13 +21,12 @@ __pycache__/
 .coverage
 .nicegui/
 
-# 系统 / 本地
+# 系统
 .DS_Store
-CLAUDE.md
 
 # MkDocs 构建产物
 site/
 
-# Mac 构建产物（mac/.gitignore 也有）
+# Mac 构建产物
 mac/.build/
 mac/LitNexus.app/
