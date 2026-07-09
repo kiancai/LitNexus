@@ -1,40 +1,27 @@
-# 数据目录
-archive/
-database/
-download/
-export/
-
-# 遗留真实数据（1.2G，保留在磁盘，但绝不入库）
-_legacy_data/
-
 # 工作区（用户数据，不应进仓库）
 *.litnexus-workspace/
 litnexus.db
 litnexus.db-*
 
-# 虚拟环境
+# 虚拟环境 / Python 缓存
 .venv/
-
-# 包构建产物
 dist/
 build/
 *.egg-info/
 __pycache__/
 *.pyc
 .ruff_cache/
-
-# 测试缓存
 .pytest_cache/
 .coverage
-
-# NiceGUI 运行时缓存
 .nicegui/
 
-# 系统文件
+# 系统 / 本地
 .DS_Store
-
-# 本地专用文件
 CLAUDE.md
 
 # MkDocs 构建产物
 site/
+
+# Mac 构建产物（mac/.gitignore 也有）
+mac/.build/
+mac/LitNexus.app/

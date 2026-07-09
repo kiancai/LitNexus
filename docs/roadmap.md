@@ -13,11 +13,12 @@
 
 ### 阶段 1 — 架构与文档基础设施 ✅ 进行中
 
-- [x] 选用 MkDocs Material
-- [x] 仓库内 `docs/` + GitHub Pages 部署
+- [x] 选用 MkDocs Material + GitHub Pages
 - [x] 架构/产品骨架页上线
-- [ ] 从 `TUTORIAL.md` / `AGENTS.md` / `TODO.md` 收敛内容，消灭「三处各说一套」
-- [ ] README 只做门面，详细内容只维护本站
+- [x] 仓库顶层整理：`mac/` · `windows/` · `python/` · `docs/`
+- [x] 删除 `_legacy_data`；Python 降级出主路径
+- [ ] 文档写深，消灭 AGENTS / 旧教程多处各说一套
+- [x] README 只做门面
 
 ### 阶段 2 — 写清文档，理顺软件目的
 
@@ -46,6 +47,6 @@
 | 项 | 原因 |
 |----|------|
 | Windows 开发 | 等 Mac 定型，避免双端返工 |
-| 退役 Python GUI | 原生稳定前保留对照 |
+| 删除整个 `python/` | 已降级；Mac/Win 都稳后再考虑物理删除 |
 | Linux 客户端 | 范围外 |
 | 独立品牌官网 | Pages 已够用；以后可同构静态产物换域名 |

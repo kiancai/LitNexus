@@ -16,7 +16,7 @@ NiceGUI 本质是 Web 方案：
 | **Mac** | Swift + SwiftUI，系统 AppKit 渲染 | 引擎完成并自检；UI 基本完整，待文档定型后收尾 |
 | **Windows** | C# + WPF，目标 .NET Framework 4.8 | **暂缓**；Mac 定型后按蓝本复刻 |
 | **Linux** | — | 暂不做 |
-| **Python** | CLI + NiceGUI | **参考实现 / 行为规范**，稳定前不急退役 |
+| **Python** | CLI + NiceGUI | **已降级**至 `python/`，非产品路径；仅对照 |
 
 不共享引擎：逻辑简单、有测试标尺，优先最小体积与纯原生。
 
@@ -47,5 +47,5 @@ NiceGUI 本质是 Web 方案：
 本站架构/产品文档  ──决定──►  Mac 收尾范围
          │
          └──定型后──►  Windows 复刻
-Python + tests + Mac selftest  ──对齐──►  行为不漂移
+Mac selftest（主）· python/ 对照（辅）  ──对齐──►  行为不漂移
 ```

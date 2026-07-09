@@ -8,6 +8,9 @@ on:
 jobs:
   lint-and-test:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: python
     steps:
       - uses: actions/checkout@v6
 
@@ -23,4 +26,4 @@ jobs:
 
       - name: Test
         run: uv run pytest tests/ -v --tb=short
-        continue-on-error: true  # 暂无测试时不阻断 CI
+        continue-on-error: true
