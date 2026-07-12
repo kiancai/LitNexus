@@ -87,5 +87,7 @@ nav:
   - 使用:
       - 快速开始: guide/quickstart.md
       - 工作区: guide/workspace.md
+      - 人工复筛与 CSV 导入: guide/manual-review.md
+      - 页面说明与帮助: guide/page-help.md
   - 路线图: roadmap.md
   - 功能备忘: backlog.md

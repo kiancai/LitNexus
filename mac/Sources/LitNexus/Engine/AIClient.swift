@@ -1,6 +1,6 @@
 import Foundation
 
-// OpenAI 兼容接口客户端：标题批量翻译 + 多问题分类。对应 Python 参考的 translator.py / classifier.py。
+// OpenAI 兼容接口客户端：标题/摘要翻译与多问题分类。
 
 enum AIClient {
     static let maxRetries = 5
@@ -426,14 +426,53 @@ enum AIClient {
 
     static func runClassification(db: Database, config ccfg: ClassifyConfig, ai: AIConfig,
                                   reporter: ProgressReporter?) throws -> (processed: Int, failed: Int) {
-        let questions = ccfg.questions.filter { $0.classify }   // 仅处理「AI 处理=开」的问题
+        // 归档只退出未来流水线，不删除历史答案。这里必须使用生命周期语义，
+        // 不能只看 classify，否则每次运行都会把已归档问题重新送给 AI。
+        let questions = ccfg.questions.filter(\.isActiveForClassification)
         if questions.isEmpty { reporter?.log("没有启用的分类问题，跳过分类。"); return (0, 0) }
+
+        // 新问题默认只面向“创建后合并”的文章；旧问题可面向全库。不同边界的问题
+        // 绝不能同批提问，否则会把新问题错误补答给历史文章。边界相同的问题仍会合批，
+        // 保留原有的多问题请求效率。
+        let grouped = Dictionary(grouping: questions, by: \.classificationScopeKey)
+        let orderedGroups = grouped.values.sorted { left, right in
+            let lhs = left.first?.classifyAfterRowID ?? -1
+            let rhs = right.first?.classifyAfterRowID ?? -1
+            return lhs < rhs
+        }
+
+        var processedIDs = Set<String>()
+        var failedIDs = Set<String>()
+        var sawPending = false
+        for group in orderedGroups {
+            if reporter?.isCancelled() == true { throw PipelineCancelled() }
+            let result = try runClassificationGroup(
+                db: db, questions: group, config: ccfg, ai: ai, reporter: reporter)
+            processedIDs.formUnion(result.processedIDs)
+            failedIDs.formUnion(result.failedIDs)
+            sawPending = sawPending || result.hadPending
+        }
+        if !sawPending { reporter?.log("没有需要分类的文章。"); return (0, 0) }
+        // 同一篇新文章可能分别落在“全部文章”问题与“仅未来”问题的组中；对用户
+        // 显示时按文章去重，避免把一个文献误报为多篇。
+        return (processedIDs.count, failedIDs.subtracting(processedIDs).count)
+    }
+
+    /// 同一适用范围的一组问题可以安全共用 AI 批次。
+    private static func runClassificationGroup(
+        db: Database,
+        questions: [Question],
+        config ccfg: ClassifyConfig,
+        ai: AIConfig,
+        reporter: ProgressReporter?
+    ) throws -> (processedIDs: Set<String>, failedIDs: Set<String>, hadPending: Bool) {
         let pending = try db.fetchPendingClassification(questions)
-        if pending.isEmpty { reporter?.log("没有需要分类的文章。"); return (0, 0) }
+        guard !pending.isEmpty else { return ([], [], false) }
 
         let maxAttempts = max(1, ccfg.maxAttempts)
         let batchSize = max(1, ccfg.batchSize)
-        reporter?.log("共 \(pending.count) 篇待分类（批量 \(batchSize)/次）")
+        let scope = questions.first?.coverage.shortLabel ?? "全部文章"
+        reporter?.log("\(scope)：\(questions.count) 个问题，共 \(pending.count) 篇待分类（批量 \(batchSize)/次）")
 
         // 无标题无摘要的，直接标 N/A，不送 AI
         var toClassify: [(epmcID: String, title: String, abstract: String)] = []
@@ -461,6 +500,8 @@ enum AIClient {
         let lock = NSLock()
         var buffer: [(epmcID: String, results: QResults)] = []
         var processed = naResults.count, transientFailed = 0
+        var processedIDs = Set(naResults.map(\.epmcID))
+        var transientFailedIDs = Set<String>()
         var parseFailedIDs: [String] = []
 
         try concurrentForEach(batches, concurrency: max(1, ccfg.maxWorkers)) { batch in
@@ -470,8 +511,10 @@ enum AIClient {
             lock.lock()
             buffer.append(contentsOf: success)
             processed += success.count
+            processedIDs.formUnion(success.map(\.epmcID))
             parseFailedIDs.append(contentsOf: parseFailed)
             transientFailed += transient.count
+            transientFailedIDs.formUnion(transient)
             if let taskID { reporter?.update(taskID, advance: batch.count) }
             if buffer.count >= 50 {
                 let flush = buffer; buffer.removeAll()
@@ -489,7 +532,7 @@ enum AIClient {
         }
 
         // 本次一篇都没成功 → 视为系统性问题，抛错且不标任何「失败」，避免误伤全库。
-        if processed == 0, transientFailed > 0 || !parseFailedIDs.isEmpty {
+        if processed == 0 && (transientFailed > 0 || !parseFailedIDs.isEmpty) {
             if let taskID { reporter?.complete(taskID) }
             throw AIError.message("分类全部失败（\(transientFailed + parseFailedIDs.count) 篇）：模型输出无法解析或接口异常，请检查模型/额外参数")
         }
@@ -507,7 +550,8 @@ enum AIClient {
             reporter?.log("⚠ \(markedFailed) 篇多次解析失败，已标记为「失败」并照常入库。")
         }
         if let taskID { reporter?.complete(taskID) }
-        return (processed, transientFailed + markedFailed)
+        let failedIDs = transientFailedIDs.union(parseFailedIDs)
+        return (processedIDs, failedIDs, true)
     }
 
     // ── 工具 ──────────────────────────────────────────────────────────────────

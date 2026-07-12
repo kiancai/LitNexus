@@ -1,7 +1,7 @@
 import Foundation
 import TOMLKit
 
-// litnexus.toml 的读写，对应 Python 参考的 config.py / config_saver.py。
+// litnexus.toml 的读写。
 // TOML 中的 [schema] 表对应模型字段 schema。
 
 enum ConfigError: Error, LocalizedError {
@@ -99,6 +99,11 @@ enum ConfigStore {
             cfg.classify.maxWorkers = c["max_workers"]?.tomlValue.int ?? cfg.classify.maxWorkers
             cfg.classify.batchSize = c["batch_size"]?.tomlValue.int ?? cfg.classify.batchSize
             cfg.classify.maxAttempts = c["max_attempts"]?.tomlValue.int ?? cfg.classify.maxAttempts
+            // `next_question_number` 是问题 id 的持久化高水位。旧项目没有该字段时，
+            // 稍后会由现存 q<N> 自动推断，首次保存后补写入 TOML。
+            if let next = c["next_question_number"]?.tomlValue.int {
+                cfg.classify.nextQuestionNumber = next
+            }
             if let qs = c["questions"]?.tomlValue.array {
                 var questions: [Question] = []
                 for item in qs {
@@ -110,23 +115,33 @@ enum ConfigStore {
                             nickname: qt["nickname"]?.tomlValue.string ?? "",
                             text: text,
                             classify: qt["classify"]?.tomlValue.bool ?? true,
-                            export: qt["export"]?.tomlValue.bool ?? true))
+                            export: qt["export"]?.tomlValue.bool ?? true,
+                            archived: qt["archived"]?.tomlValue.bool ?? false,
+                            classifyAfterRowID: qt["classify_after_rowid"]?.tomlValue.int.flatMap { $0 >= 0 ? $0 : nil }))
                     }
                 }
                 cfg.classify.questions = questions
             }
+            cfg.classify.normalizeQuestionIDAllocator()
         }
 
         if let s = table["schema"]?.tomlValue.table,
            let cols = s["custom_columns"]?.tomlValue.array {
             cfg.schema.customColumns = cols.compactMap { $0.tomlValue.string }
         }
+        cfg.schema.customColumns = SchemaConfig.normalizedAnnotationColumns(cfg.schema.customColumns)
 
         if let e = table["export"]?.tomlValue.table {
             cfg.export.filter = e["filter"]?.tomlValue.string ?? cfg.export.filter
             if let cols = e["exclude_columns"]?.tomlValue.array {
                 cfg.export.excludeColumns = cols.compactMap { $0.tomlValue.string }
             }
+        }
+
+        if let theme = table["theme"]?.tomlValue.table {
+            let hue = theme["accent_hue"]?.tomlValue.double
+                ?? theme["accent_hue"]?.tomlValue.int.map(Double.init)
+            cfg.theme.accentHue = ThemeConfig.normalizedAccentHue(hue)
         }
 
         return cfg
@@ -174,6 +189,9 @@ enum ConfigStore {
         classify["max_workers"] = cfg.classify.maxWorkers
         classify["batch_size"] = cfg.classify.batchSize
         classify["max_attempts"] = cfg.classify.maxAttempts
+        // 候选值会校正手工编辑 TOML 后过低的高水位；不会改变原配置对象，
+        // 但确保下一次 load 后的分配器仍不会复用已有 id。
+        classify["next_question_number"] = cfg.classify.persistedNextQuestionNumber
         let questions = TOMLArray()
         for q in cfg.classify.questions {
             let qt = TOMLTable()
@@ -182,6 +200,8 @@ enum ConfigStore {
             qt["text"] = q.text
             qt["classify"] = q.classify
             qt["export"] = q.export
+            qt["archived"] = q.archived
+            if let after = q.classifyAfterRowID { qt["classify_after_rowid"] = after }
             questions.append(qt)
         }
         classify["questions"] = questions
@@ -189,7 +209,7 @@ enum ConfigStore {
 
         let schema = TOMLTable()
         let customCols = TOMLArray()
-        for c in cfg.schema.customColumns { customCols.append(c) }
+        for c in SchemaConfig.normalizedAnnotationColumns(cfg.schema.customColumns) { customCols.append(c) }
         schema["custom_columns"] = customCols
         root["schema"] = schema
 
@@ -199,6 +219,13 @@ enum ConfigStore {
         for c in cfg.export.excludeColumns { excl.append(c) }
         export["exclude_columns"] = excl
         root["export"] = export
+
+        // 默认 teal 不写入配置；只有项目明确选过颜色时才保存色相。
+        if let hue = ThemeConfig.normalizedAccentHue(cfg.theme.accentHue) {
+            let theme = TOMLTable()
+            theme["accent_hue"] = hue
+            root["theme"] = theme
+        }
 
         return root.convert()
     }

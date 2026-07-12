@@ -1,6 +1,10 @@
-# LitNexus
+<p align="center">
+  <img src="mac/Assets/Brand/litnexus-mark.png" width="120" alt="LitNexus logo">
+</p>
 
-文献发现与筛选：Europe PMC → 本地工作区 → AI 初筛 → CSV 人工复筛。
+<h1 align="center">LitNexus</h1>
+
+<p align="center">文献发现与筛选：Europe PMC → 本地工作区 → AI 初筛 → CSV 人工复筛。</p>
 
 **文档** → [https://kiancai.github.io/LitNexus/](https://kiancai.github.io/LitNexus/)
 

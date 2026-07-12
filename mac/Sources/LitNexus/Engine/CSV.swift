@@ -1,6 +1,6 @@
 import Foundation
 
-// 极简 RFC4180 CSV 读写，匹配 Python csv 模块的行为（导出用 utf-8-sig，Excel 可直接打开）。
+// 极简 RFC4180 CSV 读写（导出用 utf-8-sig，Excel 可直接打开）。
 
 enum CSV {
     /// 把若干字符串行写成 CSV 文本（不含 BOM）。
@@ -15,7 +15,7 @@ enum CSV {
         return field
     }
 
-    /// 解析 CSV 文本为若干行（每行是字段数组）。宽容容错，对齐 Python csv 的非严格行为：
+    /// 解析 CSV 文本为若干行（每行是字段数组）。对常见的非严格输入保持宽容：
     /// 仅当 `"` 出现在字段起始时才视为引号字段；字段中部的 `"`、以及引号字段内未配对的 `"`
     /// 都当作字面量，绝不因一个野引号而把后续整段吞掉（这正是之前导入错位丢标注的根因）。
     static func parse(_ text: String) -> [[String]] {

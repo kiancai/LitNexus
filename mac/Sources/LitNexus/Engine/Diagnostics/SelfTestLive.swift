@@ -1,5 +1,7 @@
 import Foundation
 
+// Opt-in live Europe PMC diagnostic entry point.
+
 // 实时联网验证 EPMC 下载 → 合并端到端（打真实 API，不需要 key）。
 // 运行：swift run LitNexus epmctest
 

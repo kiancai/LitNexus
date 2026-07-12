@@ -1,7 +1,7 @@
 import Foundation
 import TOMLKit
 
-// 工作区（vault）：自包含目录，存放全部用户数据。对应 Python 参考的 workspace.py。
+// 工作区（vault）：自包含目录，存放全部用户数据。
 // 唯一在工作区外的状态是 state.toml（记录 active / recent），放系统配置目录。
 
 struct Workspace: Equatable {

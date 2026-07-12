@@ -1,6 +1,6 @@
 import Foundation
 
-// Europe PMC API 客户端，对应 Python 参考的 epmc.py（游标分页 + 重试 → JSONL）。
+// Europe PMC API 客户端（游标分页 + 重试 → JSONL）。
 
 enum EPMCClient {
     static let apiURL = "https://www.ebi.ac.uk/europepmc/webservices/rest/search"
@@ -13,11 +13,6 @@ enum EPMCClient {
         fmt.dateFormat = "yyyy-MM-dd"
         fmt.locale = Locale(identifier: "en_US_POSIX")
         return "FIRST_PDATE:[\(fmt.string(from: start)) TO 2099-12-31]"
-    }
-
-    static func loadQueryFile(_ path: URL) -> [String] {
-        guard let content = try? String(contentsOf: path, encoding: .utf8) else { return [] }
-        return filterQueries(content.components(separatedBy: "\n"))
     }
 
     /// 过滤掉注释行（# 开头）与空行，去首尾空白。

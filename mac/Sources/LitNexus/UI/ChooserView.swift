@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ChooserView: View {
     @EnvironmentObject var app: AppState
+    @Environment(\.accentPalette) private var palette
     @State private var path: String = ChooserView.defaultPath().path
 
     static func defaultPath() -> URL {
@@ -9,12 +10,12 @@ struct ChooserView: View {
         let docs = home.appendingPathComponent("Documents")
         var isDir: ObjCBool = false
         let base = FileManager.default.fileExists(atPath: docs.path, isDirectory: &isDir) && isDir.boolValue ? docs : home
-        return base.appendingPathComponent("LitNexus")
+        return base.appendingPathComponent("文献项目")
     }
 
     var body: some View {
         VStack(spacing: 16) {
-            Image(systemName: "testtube.2").font(.system(size: 49)).foregroundStyle(Theme.accent)
+            Image(systemName: "testtube.2").font(.system(size: 49)).foregroundStyle(palette.accent)
             Text("LitNexus").font(.system(size: 31, weight: .bold))
             Text("选择一个项目文件夹，所有数据都保存在其中")
                 .font(.callout).foregroundStyle(Theme.muted)
@@ -48,7 +49,7 @@ struct ChooserView: View {
                         Button(r.path) { app.openOrCreate(r) }
                             .buttonStyle(.plain)
                             .font(.system(size: 12))
-                            .foregroundStyle(Theme.accent)
+                            .foregroundStyle(palette.accent)
                     }
                 }
             }

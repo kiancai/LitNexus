@@ -1,6 +1,6 @@
 import Foundation
 
-// 流水线步骤的纯逻辑 + 供界面调用的高层封装。对应 Python 参考的 pipeline.py 与 GUI 的 _do_*。
+// 流水线步骤的纯逻辑与供界面调用的高层封装。
 
 struct MergeResult {
     var inserted: Int
@@ -97,10 +97,15 @@ enum Pipeline {
         let (columns, rows) = try db.fetchForExport(filterMode: filterMode)
         if rows.isEmpty { return 0 }
         var exclude = Set(cfg.export.excludeColumns)
+        // 人工复筛 CSV 的稳定合同：匹配键与两个人工标注列必须随导出保留。
+        // 用户可以隐藏阅读用字段，但不能把导回所需的字段悄悄排除。
+        exclude.subtract(["epmc_id", "include", "tags"])
         var headerMap: [String: String] = [:]
         for q in cfg.classify.questions {
             let ans = "\(q.id)_ans", rea = "\(q.id)_rea"
-            if q.export {
+            // 归档问题的列和历史答案仍留在数据库；普通导出则默认只展示
+            // 当前问题，避免旧问题悄悄混入新的人工复筛表。
+            if q.isCurrent && q.export {
                 headerMap[ans] = "\(q.displayName) · 答案"
                 headerMap[rea] = "\(q.displayName) · 理由"
             } else {

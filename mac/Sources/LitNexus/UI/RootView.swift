@@ -5,6 +5,10 @@ import UniformTypeIdentifiers
 struct RootView: View {
     @EnvironmentObject var app: AppState
 
+    private var palette: AccentPalette {
+        AccentPalette(hue: app.config.theme.accentHue)
+    }
+
     var body: some View {
         ZStack {
             Theme.bg.ignoresSafeArea()
@@ -14,17 +18,26 @@ struct RootView: View {
             case .main: MainView()
             }
         }
-        .tint(Theme.accent)
+        .tint(palette.accent)
         .foregroundStyle(Theme.fg)
         .overlay(alignment: .bottom) {
             if let toast = app.toast {
-                Text(toast)
-                    .font(.system(size: 14))
-                    .foregroundStyle(Theme.fg)
-                    .padding(.horizontal, 16).padding(.vertical, 10)
-                    .background(Theme.panel2)
-                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Theme.line))
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                HStack(spacing: 9) {
+                    Image(systemName: "info.circle.fill")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(palette.accent)
+                    Text(toast)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(Theme.fg)
+                }
+                .padding(.horizontal, 15)
+                .padding(.vertical, 10)
+                .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(Theme.panel))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 11, style: .continuous)
+                        .stroke(Theme.line.opacity(0.9), lineWidth: 1)
+                )
+                .shadow(color: Color.black.opacity(0.18), radius: 12, y: 5)
                     .padding(.bottom, 24)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                     .onAppear {
@@ -35,6 +48,7 @@ struct RootView: View {
             }
         }
         .animation(.easeInOut(duration: 0.2), value: app.toast)
+        .environment(\.accentPalette, palette)
     }
 }
 

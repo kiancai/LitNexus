@@ -11,11 +11,16 @@
 
 | 文件 | 你改什么 |
 |------|----------|
-| `journals.txt` | 关注期刊 |
-| `keywords.txt`（或 `keywords/*.txt`） | 检索式 |
-| `litnexus.toml` | AI、分类问题、下载参数等 |
+| `litnexus.toml` | AI 方案、分类问题、期刊清单、关键词检索式、下载参数与项目主题色 |
+| `litnexus.db` | 文章、人工复筛、AI 分类和运行时结构；通常由程序维护 |
+| `downloads/` | 原始下载文件；程序维护 |
+| `exports/` | 导出的 CSV、对照结果等；可供人工处理 |
 
-库文件 `litnexus.db` 一般由程序维护；导出在 `exports/`，原始下载在 `downloads/`。
+在 Mac 应用中，期刊和检索式在“配置 → 检索”中编辑，并自动写入 `litnexus.toml` 的 `[download]` 部分。新项目不再以 `journals.txt` 或 `keywords.txt` 为主配置源。
+
+旧项目中若还存在这些文本文件，客户端仅在 `litnexus.toml` 尚未包含相应列表时将它们作为兼容性读取来源；保存配置后，应以 TOML 内的列表为准。详见[工作区与配置](../architecture/workspace.md)。
+
+人工复筛不要直接编辑数据库：从数据页导出 CSV，再按[人工复筛与 CSV 导入](manual-review.md)的契约导回。
 
 ## 备份与迁移
 

@@ -1,5 +1,7 @@
 import Foundation
 
+// Opt-in live AI diagnostic entry point.
+
 // 临时：用环境变量里的接口直接跑 AIClient.chat，定位测试连接失败原因。
 // 运行：LNX_BASE=.. LNX_KEY=.. LNX_MODEL=.. swift run LitNexus aitest
 

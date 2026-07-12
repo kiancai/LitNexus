@@ -24,6 +24,13 @@ jobs:
         working-directory: mac
         run: ./LitNexus.app/Contents/MacOS/LitNexus selftest
 
+      - name: Verify Apple Silicon artifact
+        working-directory: mac
+        run: |
+          binary='LitNexus.app/Contents/MacOS/LitNexus'
+          file "$binary"
+          lipo -archs "$binary" | grep -qw arm64
+
       - name: Package zip + install note
         working-directory: mac
         run: |

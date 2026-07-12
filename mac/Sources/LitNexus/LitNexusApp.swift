@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 // 入口：带 selftest/epmctest 参数时跑引擎自检（无界面环境），否则启动 GUI。
 @main
@@ -38,9 +39,14 @@ struct LitNexusApp: App {
             RootView()
                 .environmentObject(app)
                 .frame(minWidth: 560, minHeight: 520)
-                .preferredColorScheme(app.appearance.colorScheme)
+                .onAppear { applyAppearance(app.appearance) }
+                .onChange(of: app.appearance) { applyAppearance($0) }
         }
         .windowStyle(.titleBar)
         .windowResizability(.contentSize)
+    }
+
+    private func applyAppearance(_ appearance: AppAppearance) {
+        NSApp.appearance = appearance.appKitAppearance
     }
 }

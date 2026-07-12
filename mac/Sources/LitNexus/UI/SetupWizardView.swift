@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SetupWizardView: View {
     @EnvironmentObject var app: AppState
+    @Environment(\.accentPalette) private var palette
     @State private var step = 0
     @State private var journals = ""
     @State private var keywords = ""
@@ -13,7 +14,7 @@ struct SetupWizardView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 8) {
-                Image(systemName: "sparkles").foregroundStyle(Theme.accent)
+                Image(systemName: "sparkles").foregroundStyle(palette.accent)
                 Text("首次设置").font(.system(size: 25, weight: .bold))
             }
             if let ws = app.workspace {

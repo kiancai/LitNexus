@@ -16,7 +16,7 @@
 - [x] 选用 MkDocs Material + GitHub Pages
 - [x] 架构/产品骨架页上线
 - [x] 仓库顶层：`mac/` · `win/` · `docs/`（对称命名）
-- [x] 旧 Python 移出 git（本地 ignore，完成后可删）
+- [x] 仓库收束为 `mac/`、`win/` 与 `docs/` 三个产品入口
 - [ ] 文档写深
 - [x] README 只做门面
 

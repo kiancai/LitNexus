@@ -1,5 +1,7 @@
 import Foundation
 
+// Standalone legacy-database migration entry point.
+
 // 一次性迁移：把旧格式 .db（只读）导入一个全新临时工作区（默认 schema），
 // 再导出为新格式独立 .db。用于把历史库接续到新软件。
 //   swift run LitNexus migrate <oldDB> <outDB>

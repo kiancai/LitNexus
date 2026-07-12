@@ -1,5 +1,7 @@
 import Foundation
 
+// Standalone CSV parser diagnostic entry point.
+
 // 临时诊断：用本项目的 CSV.parseWithHeader 解析指定文件，报告行数/列数错位/include 分布。
 //   swift run LitNexus csvtest <path>
 enum CSVTest {

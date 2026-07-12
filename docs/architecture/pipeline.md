@@ -3,37 +3,58 @@
 ## 总览
 
 ```text
+当前配置（litnexus.toml）
+    ↓
 Europe PMC API
     ↓  download   →  <工作区>/downloads/*.jsonl
     ↓  merge      →  litnexus.db（INSERT OR IGNORE 去重）
-    ↓  translate  →  db.title_zh（只译标题）
-    ↓  classify   →  db.{qid}_ans / {qid}_rea
+    ↓  translate  →  标题翻译
+    ↓  classify   →  当前启用问题的 AI 答案与理由
     ↓  export     →  exports/articles_TIMESTAMP.csv
-    ←  import     ←  人工编辑后的 CSV（include / tags 等）
+    ←  import     ←  人工复筛 CSV（仅 epmc_id / include / tags）
 ```
 
-`run` 一键执行前五步；**`import` 独立**，不在默认 `run` 内。
+`run` 一键执行下载、合并、翻译与分类；**人工复筛导入独立进行**，不在默认 `run` 内。
 
 ## 各步职责
 
-| 步骤 | 输入 | 输出 | 备注 |
-|------|------|------|------|
-| **download** | 期刊/关键词列表、天数等 | `downloads/*.jsonl` | 模式：journals / keywords / all |
-| **merge** | 未合并的 JSONL | SQLite 行 | 去重；已合并文件进 `_merged/`（Mac 已定行为） |
-| **translate** | 缺 `title_zh` 的行 | 更新 `title_zh` | 批量调用 AI |
-| **classify** | 配置中的问题列表 | `{id}_ans` / `{id}_rea` | 失败不写库，下次可重试 |
-| **export** | DB | CSV | 供人工复筛 |
-| **import** | 编辑后的 CSV | 回写标注列 | 闭环 |
+| 步骤 | 输入 | 输出 | 不应做什么 |
+|---|---|---|---|
+| **download** | 当前期刊／关键词列表、时间范围 | `downloads/*.jsonl` | 不修改已有文章或人工标注 |
+| **merge** | 尚未合并的 JSONL | SQLite 文章记录 | 不覆盖已有人工作业 |
+| **translate** | 缺翻译的文章 | 标题译文 | 不更改原文、复筛或分类答案 |
+| **classify** | 当前启用的 AI 问题 | 答案与理由 | 不覆盖人工 `include` / `tags` |
+| **export** | 数据库与导出范围 | 人工复筛 CSV | 不改变数据库 |
+| **import** | 编辑后的复筛 CSV | 人工 `include` / `tags` | 目标行为是不回写文章、翻译、AI 列 |
 
-## 分类语义（要点）
+## 分类语义
 
-- 问题在配置 `[[classify.questions]]` 中定义：`id` + `text`。
-- 答案约定：`是` / `否`；无标题摘要时可为 `N/A`。
-- **调用或解析失败**：不写 `_ans`（保持 NULL），下次运行自动重试。
-- 旧 CLI 名 `ask` 可作为 classify 的隐藏别名（参考实现）。
+- 每个问题有稳定 ID、昵称、问题文本和启用状态；当前实现的答案列为 `{id}_ans` / `{id}_rea`，后续会迁移到版本化记录。
+- AI 分类答案约定为 `是` / `否`；没有足够标题／摘要时可为 `N/A`。
+- 调用或解析失败时，不写答案，后续运行可重试。
+- 新增问题时，用户必须选择其生效范围：**仅未来新文章**是默认项；软件记录创建时的数据库边界，只有之后合并的新文章会等待该问题。选择“为历史文章补答”不会立即调用 AI，但下一次确认分类时会计入历史待办并可能消耗额度。
+- 已归档的问题不再进入以后分类，也不应混入当前统计；它们的历史答案仍保留，便于审计。
+
+问题文本发生语义变化时，不能仅替换配置中的文字来重新解释旧答案。安全默认是新建问题版本并归档旧版本；详细的生命周期与迁移目标见[数据库](database.md#question-query-lifecycle)。
+
+## 人工复筛导入语义
+
+人工复筛 CSV 的契约比“有一份能读的 CSV”更严格：
+
+- 只以 `epmc_id` 匹配文章；`pmid`、DOI、标题和行号都不是替代匹配键。
+- 只读取 `include` 和 `tags`；任何其他列一律不回写。
+- `include` 只接受 `yes` / `no`；空白代表本次不改动，不代表待复筛。
+- 必须先预检重复 ID、非法值、缺失 ID、未匹配文章和覆盖冲突，再由用户确认写入。
+- 已有人工标注默认只填补空值；允许覆盖时必须由用户显式开启。
+
+详细的异常行表、CSV 示例和表格软件注意事项见[人工复筛与 CSV 导入](../guide/manual-review.md)。
+
+## 检索式的变化不回写历史
+
+期刊和关键词检索式存于 `litnexus.toml` 的 `[download]`。它们是后续下载的配置：新增或归档一个检索式不会删除已下载文章；修改检索式应作为新版本处理，避免把不同语义的历史命中混为一谈。长期会记录下载批次和检索式版本，见[数据库](database.md#question-query-lifecycle)。
 
 ## 可中断与重跑
 
-流水线按步设计，支持从某步开始、跳到某步、跳过指定步（CLI `run` 的 from/to/skip）。翻译与分类均面向「尚未完成」的行，便于中断后继续。
+流水线按步骤设计，可从某步开始、跳到某步或跳过指定步。翻译与分类面向尚未完成的记录，便于中断后继续；它们不应重置人工复筛。
 
-更细的 CLI 参数与 GUI 对应关系，在使用文档中随实现补全。
+更细的界面操作在[页面说明与帮助](../guide/page-help.md)中随实现补全。

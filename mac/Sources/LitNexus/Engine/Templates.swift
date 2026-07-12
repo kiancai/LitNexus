@@ -1,6 +1,6 @@
 import Foundation
 
-// 新工作区的默认模板内容，对应 Python 参考的 DEFAULT_* 常量。
+// 新工作区的默认模板内容。
 
 enum Templates {
     static let defaultQuestions: [Question] = [
@@ -40,21 +40,4 @@ enum Templates {
         "\"single cell\" AND (deep learning OR neural network)",
     ]
 
-    static let defaultJournalsTxt = """
-    # 每行一个期刊名，需与 Europe PMC 中的名称完全一致；# 开头为注释、空行忽略。
-    # 下面是示例，请按需增删：
-    Nature
-    Bioinformatics
-    Genome Biology
-    Nucleic Acids Research
-
-    """
-
-    static let defaultKeywordsTxt = """
-    # 每行一个 Europe PMC 检索式，支持布尔语法（AND/OR/NOT）与引号短语；# 开头为注释。
-    # 下面是示例，请按需增删：
-    (microbiome OR microbiota) AND "machine learning"
-    "single cell" AND (deep learning OR neural network)
-
-    """
 }
