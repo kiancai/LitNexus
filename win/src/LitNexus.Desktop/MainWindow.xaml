@@ -1,0 +1,465 @@
+<Window x:Class="LitNexus.Desktop.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:LitNexus.Desktop.Controls"
+        Title="LitNexus"
+        Width="1180"
+        Height="760"
+        MinWidth="960"
+        MinHeight="640"
+        Background="#F7F9F8"
+        FontFamily="Segoe UI"
+        TextOptions.TextFormattingMode="Display"
+        UseLayoutRounding="True">
+  <Window.Resources>
+    <SolidColorBrush x:Key="CanvasBrush" Color="#F7F9F8" />
+    <SolidColorBrush x:Key="SidebarBrush" Color="#F2F6F4" />
+    <SolidColorBrush x:Key="PanelBrush" Color="#FFFFFF" />
+    <SolidColorBrush x:Key="PanelSubtleBrush" Color="#F8FBFA" />
+    <SolidColorBrush x:Key="InkBrush" Color="#1D302C" />
+    <SolidColorBrush x:Key="MutedBrush" Color="#71817C" />
+    <SolidColorBrush x:Key="LineBrush" Color="#DCE7E3" />
+    <SolidColorBrush x:Key="AccentBrush" Color="#109A8D" />
+    <SolidColorBrush x:Key="AccentSoftBrush" Color="#DDF4F0" />
+    <SolidColorBrush x:Key="AccentLineBrush" Color="#AFE5DD" />
+    <SolidColorBrush x:Key="HoverBrush" Color="#EAF2F0" />
+
+    <DropShadowEffect x:Key="CardShadow"
+                      Color="#18372F"
+                      BlurRadius="16"
+                      ShadowDepth="2"
+                      Opacity="0.075" />
+
+    <Style x:Key="NavigationButtonStyle" TargetType="{x:Type ToggleButton}">
+      <Setter Property="Width" Value="Auto" />
+      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+      <Setter Property="Padding" Value="12,10" />
+      <Setter Property="Margin" Value="0,2" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Foreground" Value="{StaticResource MutedBrush}" />
+      <Setter Property="FontSize" Value="15" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Focusable" Value="False" />
+      <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+      <Setter Property="Cursor" Value="Hand" />
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="{x:Type ToggleButton}">
+            <Border x:Name="NavigationSurface"
+                    Padding="{TemplateBinding Padding}"
+                    Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}"
+                    CornerRadius="9">
+              <ContentPresenter VerticalAlignment="Center"
+                                HorizontalAlignment="Stretch"
+                                RecognizesAccessKey="True" />
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsChecked" Value="True">
+                <Setter TargetName="NavigationSurface" Property="Background" Value="{StaticResource AccentSoftBrush}" />
+                <Setter TargetName="NavigationSurface" Property="BorderBrush" Value="{StaticResource AccentLineBrush}" />
+                <Setter Property="Foreground" Value="{StaticResource InkBrush}" />
+              </Trigger>
+              <MultiTrigger>
+                <MultiTrigger.Conditions>
+                  <Condition Property="IsMouseOver" Value="True" />
+                  <Condition Property="IsChecked" Value="False" />
+                </MultiTrigger.Conditions>
+                <Setter TargetName="NavigationSurface" Property="Background" Value="{StaticResource HoverBrush}" />
+              </MultiTrigger>
+              <Trigger Property="IsPressed" Value="True">
+                <Setter TargetName="NavigationSurface" Property="Opacity" Value="0.78" />
+              </Trigger>
+              <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Opacity" Value="0.46" />
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <Style x:Key="CardStyle" TargetType="{x:Type Border}">
+      <Setter Property="Background" Value="{StaticResource PanelBrush}" />
+      <Setter Property="BorderBrush" Value="{StaticResource LineBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="16" />
+      <Setter Property="Effect" Value="{StaticResource CardShadow}" />
+    </Style>
+
+    <Style x:Key="StatusPillStyle" TargetType="{x:Type Border}">
+      <Setter Property="Background" Value="#EDF3F1" />
+      <Setter Property="CornerRadius" Value="11" />
+      <Setter Property="Padding" Value="10,5" />
+    </Style>
+
+    <Style x:Key="SidebarActionButtonStyle" TargetType="{x:Type Button}">
+      <Setter Property="Padding" Value="9,6" />
+      <Setter Property="Margin" Value="0,0,7,0" />
+      <Setter Property="Background" Value="#FFFFFF" />
+      <Setter Property="BorderBrush" Value="{StaticResource LineBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Foreground" Value="{StaticResource InkBrush}" />
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Cursor" Value="Hand" />
+      <Setter Property="Focusable" Value="False" />
+      <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="{x:Type Button}">
+            <Border x:Name="ActionSurface"
+                    Padding="{TemplateBinding Padding}"
+                    Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}"
+                    CornerRadius="7">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="ActionSurface" Property="Background" Value="{StaticResource HoverBrush}" />
+              </Trigger>
+              <Trigger Property="IsPressed" Value="True">
+                <Setter TargetName="ActionSurface" Property="Opacity" Value="0.78" />
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+  </Window.Resources>
+
+  <Grid Background="{StaticResource CanvasBrush}">
+    <Grid.ColumnDefinitions>
+      <ColumnDefinition Width="248" />
+      <ColumnDefinition Width="*" />
+    </Grid.ColumnDefinitions>
+
+    <Border Grid.Column="0"
+            Background="{StaticResource SidebarBrush}"
+            BorderBrush="{StaticResource LineBrush}"
+            BorderThickness="0,0,1,0">
+      <Grid Margin="20,22,20,18">
+        <Grid.RowDefinitions>
+          <RowDefinition Height="Auto" />
+          <RowDefinition Height="Auto" />
+          <RowDefinition Height="*" />
+          <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Margin="4,0,4,28" Orientation="Horizontal">
+          <Border Width="36"
+                  Height="36"
+                  Background="{StaticResource AccentSoftBrush}"
+                  CornerRadius="10">
+            <Grid>
+              <TextBlock Text="L"
+                         Margin="0,0,7,0"
+                         HorizontalAlignment="Center"
+                         VerticalAlignment="Center"
+                         FontSize="16"
+                         FontWeight="Bold"
+                         Foreground="{StaticResource AccentBrush}" />
+              <TextBlock Text="N"
+                         Margin="8,8,0,0"
+                         HorizontalAlignment="Center"
+                         VerticalAlignment="Center"
+                         FontSize="12"
+                         FontWeight="Bold"
+                         Foreground="{StaticResource InkBrush}" />
+            </Grid>
+          </Border>
+          <TextBlock Margin="10,0,0,0"
+                     VerticalAlignment="Center"
+                     Text="LitNexus"
+                     FontSize="18"
+                     FontWeight="SemiBold"
+                     Foreground="{StaticResource InkBrush}" />
+        </StackPanel>
+
+        <StackPanel Grid.Row="1">
+          <TextBlock Margin="5,0,0,7"
+                     Text="工作区"
+                     FontSize="11"
+                     FontWeight="SemiBold"
+                     Foreground="{StaticResource MutedBrush}" />
+
+          <ToggleButton x:Name="RunNavigationButton"
+                        Tag="Run"
+                        Style="{StaticResource NavigationButtonStyle}"
+                        Click="OnNavigationClick">
+            <Grid>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="27" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+              <TextBlock Grid.Column="0" Text="▶" FontSize="13" VerticalAlignment="Center" />
+              <TextBlock Grid.Column="1" Text="运行" VerticalAlignment="Center" />
+            </Grid>
+          </ToggleButton>
+
+          <ToggleButton x:Name="DataNavigationButton"
+                        Tag="Data"
+                        Style="{StaticResource NavigationButtonStyle}"
+                        Click="OnNavigationClick">
+            <Grid>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="27" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+              <TextBlock Grid.Column="0" Text="▣" FontSize="16" VerticalAlignment="Center" />
+              <TextBlock Grid.Column="1" Text="数据" VerticalAlignment="Center" />
+            </Grid>
+          </ToggleButton>
+
+          <ToggleButton x:Name="StatisticsNavigationButton"
+                        Tag="Statistics"
+                        Style="{StaticResource NavigationButtonStyle}"
+                        Click="OnNavigationClick">
+            <Grid>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="27" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+              <TextBlock Grid.Column="0" Text="▥" FontSize="17" VerticalAlignment="Center" />
+              <TextBlock Grid.Column="1" Text="统计" VerticalAlignment="Center" />
+            </Grid>
+          </ToggleButton>
+
+          <ToggleButton x:Name="SettingsNavigationButton"
+                        Tag="Settings"
+                        Style="{StaticResource NavigationButtonStyle}"
+                        Click="OnNavigationClick">
+            <Grid>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="27" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+              <TextBlock Grid.Column="0" Text="⚙" FontSize="18" VerticalAlignment="Center" />
+              <TextBlock Grid.Column="1" Text="配置" VerticalAlignment="Center" />
+            </Grid>
+          </ToggleButton>
+        </StackPanel>
+
+        <StackPanel Grid.Row="3">
+          <Separator Margin="0,0,0,16"
+                     Background="{StaticResource LineBrush}" />
+          <StackPanel Orientation="Horizontal">
+            <Border Width="30"
+                    Height="30"
+                    Background="{StaticResource AccentSoftBrush}"
+                    CornerRadius="8">
+              <TextBlock Text="▰"
+                         VerticalAlignment="Center"
+                         HorizontalAlignment="Center"
+                         FontSize="15"
+                         Foreground="{StaticResource AccentBrush}" />
+            </Border>
+            <StackPanel Margin="9,0,0,0">
+              <TextBlock Text="当前项目"
+                         FontSize="10"
+                         FontWeight="SemiBold"
+                         Foreground="{StaticResource MutedBrush}" />
+              <TextBlock x:Name="ProjectNameText"
+                         Margin="0,2,0,0"
+                         MaxWidth="150"
+                         Text="未选择项目"
+                         TextTrimming="CharacterEllipsis"
+                         FontSize="13"
+                         FontWeight="SemiBold"
+                         Foreground="{StaticResource InkBrush}" />
+            </StackPanel>
+          </StackPanel>
+          <StackPanel x:Name="ProjectActionsPanel"
+                      Margin="2,12,0,0"
+                      Orientation="Horizontal"
+                      Visibility="Collapsed">
+            <Button Style="{StaticResource SidebarActionButtonStyle}" Click="OnRevealProjectClick">目录</Button>
+            <Button Style="{StaticResource SidebarActionButtonStyle}" Margin="0" Click="OnSwitchProjectClick">切换</Button>
+          </StackPanel>
+          <TextBlock x:Name="ProjectHintText"
+                     Margin="2,11,0,0"
+                     Text="选择项目后即可按页面逐步使用。"
+                     FontSize="11"
+                     Foreground="{StaticResource MutedBrush}" />
+        </StackPanel>
+      </Grid>
+    </Border>
+
+    <Grid Grid.Column="1">
+      <Grid.RowDefinitions>
+        <RowDefinition Height="58" />
+        <RowDefinition Height="*" />
+      </Grid.RowDefinitions>
+
+      <Border Grid.Row="0"
+              Background="#FBFCFB"
+              BorderBrush="{StaticResource LineBrush}"
+              BorderThickness="0,0,0,1">
+        <Grid Margin="30,0">
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="Auto" />
+          </Grid.ColumnDefinitions>
+          <StackPanel VerticalAlignment="Center" Orientation="Horizontal">
+            <TextBlock Text="LitNexus"
+                       FontSize="15"
+                       FontWeight="SemiBold"
+                       Foreground="{StaticResource InkBrush}" />
+            <TextBlock Margin="10,0"
+                       Text="/"
+                       FontSize="14"
+                       Foreground="#A0ADA9" />
+            <TextBlock x:Name="BreadcrumbText"
+                       Text="运行"
+                       FontSize="14"
+                       Foreground="{StaticResource MutedBrush}" />
+          </StackPanel>
+          <Border Grid.Column="1"
+                  VerticalAlignment="Center"
+                  Style="{StaticResource StatusPillStyle}">
+            <StackPanel Orientation="Horizontal">
+              <Ellipse Width="6"
+                       Height="6"
+                       Margin="0,0,6,0"
+                       VerticalAlignment="Center"
+                       Fill="{StaticResource AccentBrush}" />
+              <TextBlock x:Name="WorkspaceStatusText"
+                         Text="未选择项目"
+                         FontSize="12"
+                         FontWeight="SemiBold"
+                         Foreground="{StaticResource MutedBrush}" />
+            </StackPanel>
+          </Border>
+        </Grid>
+      </Border>
+
+      <ScrollViewer Grid.Row="1"
+                    VerticalScrollBarVisibility="Auto"
+                    HorizontalScrollBarVisibility="Disabled"
+                    Background="{StaticResource CanvasBrush}">
+        <Grid Margin="42,38,42,56"
+              MaxWidth="840"
+              HorizontalAlignment="Center">
+          <StackPanel>
+            <StackPanel Orientation="Horizontal">
+              <Border Width="35"
+                      Height="35"
+                      Margin="0,1,11,0"
+                      Background="{StaticResource AccentSoftBrush}"
+                      CornerRadius="10">
+                <TextBlock x:Name="PageGlyphText"
+                           Text="▶"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"
+                           FontSize="15"
+                           Foreground="{StaticResource AccentBrush}" />
+              </Border>
+              <StackPanel>
+                <StackPanel Orientation="Horizontal">
+                  <TextBlock x:Name="PageTitleText"
+                             Text="运行"
+                             FontSize="31"
+                             FontWeight="SemiBold"
+                             Foreground="{StaticResource InkBrush}" />
+                  <Border Margin="10,8,0,0"
+                          Width="18"
+                          Height="18"
+                          BorderBrush="#9AA8A3"
+                          BorderThickness="1"
+                          CornerRadius="9"
+                          ToolTip="页面说明将在对应功能交付时提供。">
+                    <TextBlock Text="?"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center"
+                               FontSize="12"
+                               FontWeight="Bold"
+                               Foreground="{StaticResource MutedBrush}" />
+                  </Border>
+                </StackPanel>
+                <TextBlock x:Name="PageSubtitleText"
+                           Margin="0,5,0,0"
+                           Text="处理下载、合并、翻译与分类。"
+                           FontSize="15"
+                           Foreground="{StaticResource MutedBrush}" />
+              </StackPanel>
+            </StackPanel>
+
+            <StackPanel x:Name="PlaceholderContentPanel">
+            <Border Margin="0,30,0,0" Padding="28" Style="{StaticResource CardStyle}">
+              <StackPanel>
+                <TextBlock x:Name="PrimaryCardTitleText"
+                           Text="运行工作区尚未接入"
+                           FontSize="19"
+                           FontWeight="SemiBold"
+                           Foreground="{StaticResource InkBrush}" />
+                <TextBlock x:Name="PrimaryCardDescriptionText"
+                           Margin="0,9,0,0"
+                           Text="Windows 端正先验证与 Mac 项目相同的配置、SQLite 与复筛 CSV 契约。"
+                           FontSize="14"
+                           LineHeight="22"
+                           TextWrapping="Wrap"
+                           Foreground="{StaticResource MutedBrush}" />
+                <Border Margin="0,22,0,0"
+                        Padding="16"
+                        Background="{StaticResource PanelSubtleBrush}"
+                        BorderBrush="{StaticResource LineBrush}"
+                        BorderThickness="1"
+                        CornerRadius="10">
+                  <StackPanel Orientation="Horizontal">
+                    <Ellipse Width="9"
+                             Height="9"
+                             Margin="0,3,10,0"
+                             Fill="{StaticResource AccentBrush}" />
+                    <TextBlock x:Name="PrimaryCardStatusText"
+                               Text="下一步：建立并验证真实工作区的读取边界。"
+                               FontSize="13"
+                               FontWeight="SemiBold"
+                               TextWrapping="Wrap"
+                               Foreground="{StaticResource InkBrush}" />
+                  </StackPanel>
+                </Border>
+              </StackPanel>
+            </Border>
+
+            <Border Margin="0,20,0,0" Padding="28" Style="{StaticResource CardStyle}">
+              <StackPanel>
+                <TextBlock x:Name="SecondaryCardTitleText"
+                           Text="功能将按跨端契约逐页接入"
+                           FontSize="17"
+                           FontWeight="SemiBold"
+                           Foreground="{StaticResource InkBrush}" />
+                <TextBlock x:Name="SecondaryCardDescriptionText"
+                           Margin="0,8,0,0"
+                           Text="这个外壳暂不修改项目数据，也不假装提供尚未实现的操作。"
+                           FontSize="14"
+                           LineHeight="22"
+                           TextWrapping="Wrap"
+                           Foreground="{StaticResource MutedBrush}" />
+              </StackPanel>
+            </Border>
+
+            <TextBlock Margin="4,22,4,0"
+                       Text="LitNexus for Windows · 独立原生实现 · 与 Mac 共享工作区格式，不共享运行时。"
+                       FontSize="12"
+                       Foreground="#87948F"
+                       TextWrapping="Wrap" />
+            </StackPanel>
+
+            <controls:SettingsPanel x:Name="SettingsPanel"
+                                    Margin="0,30,0,0"
+                                    Visibility="Collapsed" />
+
+            <controls:DataPanel x:Name="DataPanel"
+                                Margin="0,30,0,0"
+                                Visibility="Collapsed" />
+          </StackPanel>
+        </Grid>
+      </ScrollViewer>
+    </Grid>
+  </Grid>
+</Window>

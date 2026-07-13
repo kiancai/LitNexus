@@ -1,0 +1,18 @@
+# Hand-edited edge cases: loading must preserve only safe annotation columns,
+# raise a stale q<N> high-water mark, and canonicalize/clear hue values.
+[classify]
+next_question_number = 2
+
+[[classify.questions]]
+id = "q9"
+nickname = "保留"
+text = "问题"
+classify = true
+export = true
+archived = false
+
+[schema]
+custom_columns = ["tags", "include", "review_note", "bad column", "title", "q9_ans", "q9_rea", "review_note", "_private"]
+
+[theme]
+accent_hue = 1.0

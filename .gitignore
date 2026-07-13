@@ -22,6 +22,7 @@ __pycache__/
 
 # 系统
 .DS_Store
+._*
 
 # MkDocs 构建产物
 site/
@@ -29,3 +30,9 @@ site/
 # Mac 构建产物
 mac/.build/
 mac/LitNexus.app/
+
+# Windows 构建产物
+win/**/bin/
+win/**/obj/
+win/.vs/
+win/*.user

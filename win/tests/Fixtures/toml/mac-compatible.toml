@@ -1,0 +1,57 @@
+# Cross-platform fixture: all keys use the same TOML names emitted/read by Mac.
+[download]
+days = 14
+page_size = 250
+request_delay = 0.25
+journals = ["Nature", "Bioinformatics"]
+keywords = ["(microbiome OR microbiota) AND \"machine learning\"", "# a retained editor comment"]
+
+[ai]
+active = "profile-primary"
+
+[[ai.profiles]]
+id = "profile-primary"
+name = "测试接口"
+base_url = "https://example.invalid/v1"
+model = "test-model"
+api_key = "do-not-use"
+extra_params = "{\"temperature\":0}"
+
+[translate]
+batch_size = 12
+concurrency = 4
+translate_abstract = false
+abstract_batch_size = 5
+
+[classify]
+max_workers = 3
+batch_size = 7
+max_attempts = 2
+next_question_number = 4
+
+[[classify.questions]]
+id = "q1"
+nickname = "领域"
+text = "是否属于目标领域？"
+classify = true
+export = true
+archived = false
+
+[[classify.questions]]
+id = "q3"
+nickname = "仅未来"
+text = "是否属于新问题？"
+classify = true
+export = false
+archived = true
+classify_after_rowid = 882
+
+[schema]
+custom_columns = ["include", "tags", "review_note"]
+
+[export]
+filter = "pending"
+exclude_columns = ["journal_info_json", "keyword_list_json"]
+
+[theme]
+accent_hue = 0.42

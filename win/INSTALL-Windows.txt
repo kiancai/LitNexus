@@ -1,0 +1,43 @@
+LitNexus for Windows — Preview
+===============================
+
+这是 Windows 原生预览版（WPF / .NET Framework 4.8）。当前可测试：
+- 项目创建、打开与最近项目；
+- 基础检索配置；
+- 数据状态、CSV 导出与人工复筛 CSV 导回。
+
+“运行”、统计、完整配置与数据库维护仍在与 macOS 版逐步对标，预览阶段请不要将
+Windows 版当作唯一的生产环境。
+
+系统要求
+--------
+- 64 位 Windows 10 或 Windows 11；
+- .NET Framework 4.8 或更高版本（多数已更新的 Windows 已自带）。
+
+安装与启动
+----------
+1. 下载 LitNexus-windows-net48-preview.zip。
+2. 右键压缩包，选择“全部提取…”，并保留解压后的整个目录。
+3. 进入 LitNexus-windows-net48-preview 目录，双击 LitNexus.exe。
+
+不要在压缩包内直接运行，也不要只复制 LitNexus.exe；同目录的 DLL、SQLite 原生库和
+配置文件都是运行所需的一部分。
+
+未签名提示
+----------
+这是个人项目的未签名测试构建。若 Windows SmartScreen 显示“Windows 已保护你的电脑”，
+确认发布来源可信后，可选择“更多信息”→“仍要运行”。
+
+校验下载（可选）
+------------------
+Release 同时提供 .sha256 文件。解压前可在 PowerShell 中执行：
+
+  (Get-FileHash .\LitNexus-windows-net48-preview.zip -Algorithm SHA256).Hash
+
+将输出与 .sha256 文件中的哈希值比对。
+
+数据与跨设备使用
+----------------
+应用程序和数据工作区分离：升级时替换应用目录不会删除你的工作区。不要让 macOS 和
+Windows 客户端同时写同一个 SQLite/WAL 工作区；跨设备迁移前请退出一端，再整体复制
+工作区，或使用应用内的数据库备份。

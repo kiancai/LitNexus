@@ -1,0 +1,13 @@
+<Project>
+  <!--
+    macOS can create AppleDouble sidecar files (for example ._Program.cs) when
+    a source tree is copied by archive or removable media. They are binary
+    metadata, not C# source; excluding them here keeps a Windows build from
+    mistaking them for Compile items before the files can be cleaned up.
+  -->
+  <ItemGroup>
+    <Compile Remove="**/._*.cs" />
+    <EmbeddedResource Remove="**/._*" />
+    <None Remove="**/._*" />
+  </ItemGroup>
+</Project>

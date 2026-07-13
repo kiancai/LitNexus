@@ -1,7 +1,7 @@
 name: Release
 
-# 原生 Mac 版发布：打 tag（v*）即在 macOS runner 上用 SPM 构建 .app、跑引擎自检、
-# 打包 zip 并创建 GitHub Release。Windows 原生版暂缓，待 Mac 定型后再加 job。
+# 只有发布 tag 才构建。两个平台各自产出资产；唯一的 publish job 在两个构建都
+# 成功后创建 / 更新 GitHub Release，避免并行 job 互相争用同一个 release。
 on:
   push:
     tags:
@@ -11,7 +11,7 @@ jobs:
   build-mac:
     runs-on: macos-latest
     permissions:
-      contents: write
+      contents: read
 
     steps:
       - uses: actions/checkout@v6
@@ -31,9 +31,10 @@ jobs:
           file "$binary"
           lipo -archs "$binary" | grep -qw arm64
 
-      - name: Package zip + install note
+      - name: Package macOS asset
         working-directory: mac
         run: |
+          mkdir -p release-assets
           printf '%s\n' \
             'LitNexus for macOS（Apple Silicon / arm64）' \
             '' \
@@ -43,14 +44,105 @@ jobs:
             '' \
             '升级：下载新版本 zip，解压后用新的 LitNexus.app 覆盖旧的即可。' \
             '你的数据存放在自己选择的「工作区」目录，与 App 分离，升级不会丢失。' \
-            > 'INSTALL-macOS.txt'
-          ditto -c -k --keepParent LitNexus.app LitNexus-macos-arm64.zip
+            > 'release-assets/INSTALL-macOS.txt'
+          ditto -c -k --keepParent LitNexus.app release-assets/LitNexus-macos-arm64.zip
+
+      - name: Upload macOS release assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-macos
+          path: mac/release-assets/
+          if-no-files-found: error
+
+  build-windows:
+    runs-on: windows-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up .NET SDK for the Windows build
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Build Windows app and run contract selftest
+        shell: pwsh
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          if (-not $tag.StartsWith('v') -or $tag.Length -le 1) {
+            throw "Expected a v-prefixed release tag, got '$tag'."
+          }
+
+          # Keep the portable prerelease identity (for example 0.2.0-beta6)
+          # in the Windows binary while build.ps1 derives numeric FileVersion.
+          $version = $tag.Substring(1)
+          .\win\build.ps1 -Configuration Release -SelfTest -Version $version
+
+      - name: Package complete Windows runtime directory
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $assetName = 'LitNexus-windows-net48-preview'
+          $runtimeDirectory = Join-Path $PWD 'win\src\LitNexus.Desktop\bin\Release\net48'
+          $executable = Join-Path $runtimeDirectory 'LitNexus.exe'
+          if (-not (Test-Path $executable)) {
+            throw "Expected Windows executable was not built: $executable"
+          }
+
+          $releaseAssets = Join-Path $PWD 'release-assets'
+          $packageRoot = Join-Path $env:RUNNER_TEMP $assetName
+          Remove-Item -Recurse -Force $releaseAssets, $packageRoot -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Path $releaseAssets, $packageRoot | Out-Null
+
+          # 运行时所需的所有 DLL、原生 SQLite 库和 .config 都必须一起保留；不可只发布 exe。
+          Copy-Item -Recurse -Force (Join-Path $runtimeDirectory '*') $packageRoot
+          Copy-Item -Force 'win\INSTALL-Windows.txt' (Join-Path $packageRoot 'INSTALL-Windows.txt')
+
+          $zipPath = Join-Path $releaseAssets "$assetName.zip"
+          Compress-Archive -Path $packageRoot -DestinationPath $zipPath -CompressionLevel Optimal
+
+          $hash = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $assetName.zip" | Set-Content -LiteralPath "$zipPath.sha256" -Encoding ascii
+          Copy-Item -Force 'win\INSTALL-Windows.txt' $releaseAssets
+
+      - name: Upload Windows release assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-windows
+          path: release-assets/
+          if-no-files-found: error
+
+  publish:
+    needs:
+      - build-mac
+      - build-windows
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download release assets from both platform builds
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: List release assets
+        run: find release-assets -maxdepth 1 -type f -print | sort
 
       - name: Create / update GitHub Release
         uses: softprops/action-gh-release@v3
         with:
-          files: |
-            mac/LitNexus-macos-arm64.zip
-            mac/INSTALL-macOS.txt
+          files: release-assets/*
+          body: |
+            ## Windows Preview
+
+            `LitNexus-windows-net48-preview.zip` 是完整解压后即可运行的便携测试包；请不要单独移动其中的 `LitNexus.exe`。
+
+            本轮 Windows Preview 可测试项目选择、基础配置、数据状态、CSV 导出与人工复筛导回。运行、统计、完整配置和数据库维护仍在逐页对标，暂不应作为唯一生产环境。
+
+            同一个工作区可在 macOS 和 Windows 间迁移，但两端不能同时写入同一个 SQLite/WAL 工作区。
           generate_release_notes: true
           prerelease: ${{ contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') }}

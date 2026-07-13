@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>LitNexus.Core</AssemblyName>
+    <RootNamespace>LitNexus.Core</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.9" />
+    <PackageReference Include="System.Text.Json" Version="10.0.9" />
+    <PackageReference Include="Tomlyn" Version="2.10.1" />
+  </ItemGroup>
+</Project>

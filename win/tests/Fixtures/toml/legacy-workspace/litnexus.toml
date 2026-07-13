@@ -1,0 +1,12 @@
+# Legacy compatibility fixture: list keys are intentionally absent, and the
+# pre-profile [ai] fields should become one named profile on load.
+[download]
+days = 21
+page_size = 500
+request_delay = 0.75
+
+[ai]
+base_url = "https://legacy.example.invalid/v1"
+model = "legacy-model"
+api_key = "legacy-key"
+extra_params = "{\"legacy\":true}"

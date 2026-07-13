@@ -23,7 +23,7 @@
 LitNexus/
 ├── docs/          # 仅网页文档源
 ├── mac/           # Mac 原生
-├── win/           # Windows 占位
+├── win/           # Windows 原生：Core / WPF 基础工程与 selftest
 ├── mkdocs.yml
 └── README.md
 ```

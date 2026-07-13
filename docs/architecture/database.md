@@ -28,7 +28,7 @@
 
 合并阶段以主键／唯一约束使用 `INSERT OR IGNORE` 类语义，避免重复入库。`include` 和 `tags` 是人工数据，不能由下载、合并、翻译或分类步骤重写。
 
-## 人工复筛数据契约（Mac 已实现）
+## 人工复筛数据契约（Mac 与 Windows Core 已实现）
 
 人工标注 CSV 导入只有 `epmc_id`、`include` 和 `tags` 有语义：
 

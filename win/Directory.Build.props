@@ -1,0 +1,28 @@
+<Project>
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Deterministic>true</Deterministic>
+    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+    <GenerateBindingRedirectsOutputType>true</GenerateBindingRedirectsOutputType>
+
+    <!--
+      版本的职责分开：Version / InformationalVersion 可保留预发布标识，
+      而 AssemblyVersion / FileVersion 必须是 Windows 可识别的纯数字版本。
+      正式构建请通过 build.ps1 -Version 传入标签；脚本会覆盖后三项。
+    -->
+    <Version Condition="'$(Version)' == ''">0.2.0-dev</Version>
+    <InformationalVersion Condition="'$(InformationalVersion)' == ''">$(Version)</InformationalVersion>
+    <AssemblyVersion Condition="'$(AssemblyVersion)' == ''">0.2.0.0</AssemblyVersion>
+    <FileVersion Condition="'$(FileVersion)' == ''">0.2.0.0</FileVersion>
+  </PropertyGroup>
+
+  <!-- 远程构建机只需 .NET SDK；无需预装完整的 .NET Framework Developer Pack。 -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies.net48"
+                      Version="1.0.3"
+                      PrivateAssets="all" />
+  </ItemGroup>
+</Project>

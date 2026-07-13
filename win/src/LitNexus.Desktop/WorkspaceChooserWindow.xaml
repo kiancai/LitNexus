@@ -1,0 +1,170 @@
+<Window x:Class="LitNexus.Desktop.WorkspaceChooserWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="打开项目 — LitNexus"
+        Width="548"
+        MinHeight="356"
+        SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False"
+        Background="#F7F9F8"
+        FontFamily="Segoe UI"
+        TextOptions.TextFormattingMode="Display"
+        UseLayoutRounding="True">
+  <Window.Resources>
+    <SolidColorBrush x:Key="InkBrush" Color="#1D302C" />
+    <SolidColorBrush x:Key="MutedBrush" Color="#71817C" />
+    <SolidColorBrush x:Key="LineBrush" Color="#DCE7E3" />
+    <SolidColorBrush x:Key="AccentBrush" Color="#109A8D" />
+    <SolidColorBrush x:Key="AccentSoftBrush" Color="#DDF4F0" />
+
+    <Style x:Key="SurfaceButtonStyle" TargetType="{x:Type Button}">
+      <Setter Property="Padding" Value="13,8" />
+      <Setter Property="Background" Value="#FFFFFF" />
+      <Setter Property="BorderBrush" Value="{StaticResource LineBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Foreground" Value="{StaticResource InkBrush}" />
+      <Setter Property="FontSize" Value="13" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Cursor" Value="Hand" />
+      <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="{x:Type Button}">
+            <Border x:Name="Surface"
+                    Padding="{TemplateBinding Padding}"
+                    Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}"
+                    CornerRadius="8">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="Surface" Property="Background" Value="#F3F8F6" />
+              </Trigger>
+              <Trigger Property="IsPressed" Value="True">
+                <Setter TargetName="Surface" Property="Opacity" Value="0.78" />
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <Style x:Key="PrimaryButtonStyle" TargetType="{x:Type Button}" BasedOn="{StaticResource SurfaceButtonStyle}">
+      <Setter Property="Background" Value="{StaticResource AccentBrush}" />
+      <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+      <Setter Property="Foreground" Value="#FFFFFF" />
+      <Setter Property="Padding" Value="16,8" />
+      <Style.Triggers>
+        <Trigger Property="IsMouseOver" Value="True">
+          <Setter Property="Background" Value="#0D897E" />
+          <Setter Property="BorderBrush" Value="#0D897E" />
+        </Trigger>
+      </Style.Triggers>
+    </Style>
+
+    <Style x:Key="RecentButtonStyle" TargetType="{x:Type Button}">
+      <Setter Property="Padding" Value="9,7" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Foreground" Value="#34776F" />
+      <Setter Property="HorizontalContentAlignment" Value="Left" />
+      <Setter Property="Cursor" Value="Hand" />
+      <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="{x:Type Button}">
+            <Border x:Name="RecentSurface" Padding="{TemplateBinding Padding}" CornerRadius="7">
+              <ContentPresenter />
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="RecentSurface" Property="Background" Value="#EDF6F3" />
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+  </Window.Resources>
+
+  <Grid Margin="30,28,30,24">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+    </Grid.RowDefinitions>
+
+    <StackPanel Grid.Row="0" Orientation="Horizontal">
+      <Border Width="42" Height="42" Background="{StaticResource AccentSoftBrush}" CornerRadius="12">
+        <Grid>
+          <TextBlock Text="L" Margin="0,0,8,0" HorizontalAlignment="Center" VerticalAlignment="Center"
+                     FontSize="18" FontWeight="Bold" Foreground="{StaticResource AccentBrush}" />
+          <TextBlock Text="N" Margin="9,10,0,0" HorizontalAlignment="Center" VerticalAlignment="Center"
+                     FontSize="13" FontWeight="Bold" Foreground="{StaticResource InkBrush}" />
+        </Grid>
+      </Border>
+      <StackPanel Margin="12,0,0,0" VerticalAlignment="Center">
+        <TextBlock Text="打开或新建项目" FontSize="21" FontWeight="SemiBold" Foreground="{StaticResource InkBrush}" />
+        <TextBlock Margin="0,3,0,0" Text="所有文献、配置与人工复筛结果都保存在项目文件夹中。"
+                   FontSize="13" Foreground="{StaticResource MutedBrush}" />
+      </StackPanel>
+    </StackPanel>
+
+    <StackPanel Grid.Row="1" Margin="0,25,0,0">
+      <TextBlock Text="项目文件夹" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource MutedBrush}" />
+      <Grid Margin="0,7,0,0">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*" />
+          <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+        <TextBox x:Name="WorkspacePathText"
+                 Padding="10,8"
+                 Margin="0,0,8,0"
+                 BorderBrush="{StaticResource LineBrush}"
+                 BorderThickness="1"
+                 FontSize="13"
+                 VerticalContentAlignment="Center" />
+        <Button Grid.Column="1" Style="{StaticResource SurfaceButtonStyle}" Click="OnBrowseClick">浏览…</Button>
+      </Grid>
+      <TextBlock Margin="0,7,0,0" Text="已有项目会直接打开；尚未初始化的文件夹会创建一个新的 LitNexus 项目。"
+                 FontSize="12" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" />
+      <TextBlock x:Name="MessageText" Margin="0,9,0,0" Visibility="Collapsed"
+                 FontSize="12" Foreground="#B42318" TextWrapping="Wrap" />
+    </StackPanel>
+
+    <Border x:Name="RecentSection" Grid.Row="2" Margin="0,21,0,0" Padding="13"
+            Background="#FFFFFF" BorderBrush="{StaticResource LineBrush}" BorderThickness="1" CornerRadius="10">
+      <StackPanel>
+        <TextBlock Text="最近打开" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource MutedBrush}" />
+        <ItemsControl x:Name="RecentItemsControl" Margin="0,6,0,0">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate>
+              <Button Tag="{Binding}" Style="{StaticResource RecentButtonStyle}" Click="OnRecentClick">
+                <TextBlock Text="{Binding}" TextTrimming="CharacterEllipsis" />
+              </Button>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </StackPanel>
+    </Border>
+
+    <Grid Grid.Row="3" Margin="0,25,0,0">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*" />
+        <ColumnDefinition Width="Auto" />
+        <ColumnDefinition Width="Auto" />
+      </Grid.ColumnDefinitions>
+      <TextBlock VerticalAlignment="Center" Text="项目路径仅记录在这台电脑的最近项目列表中。"
+                 FontSize="11" Foreground="{StaticResource MutedBrush}" />
+      <Button Grid.Column="1" Margin="12,0,8,0" Style="{StaticResource SurfaceButtonStyle}" IsCancel="True"
+              Click="OnCancelClick">取消</Button>
+      <Button Grid.Column="2" Style="{StaticResource PrimaryButtonStyle}" IsDefault="True" Click="OnOpenClick">打开 / 新建</Button>
+    </Grid>
+  </Grid>
+</Window>
