@@ -27,7 +27,7 @@ LitNexus/
 | `win/` | Windows 原生：按 Mac 的磁盘与行为契约独立复刻 |
 | `docs/` | 目的、架构、使用、路线图（仅网页文档） |
 
-节奏：**文档定型 → Mac 收尾 → Windows 基础工程 → 功能复刻**。见 [路线图](https://kiancai.github.io/LitNexus/roadmap/)。
+节奏：**文档定型 → Mac 收尾 → Windows 基础工程 → 功能复刻**。见 [路线图](https://kiancai.github.io/LitNexus/develop/roadmap/)。
 
 ---
 

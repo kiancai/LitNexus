@@ -15,19 +15,29 @@
 
 === ":fontawesome-brands-windows: Windows"
 
-    1. 步骤1
-    2. 步骤2
+    1. 打开 [GitHub Releases](https://github.com/kiancai/LitNexus/releases)，下载 `LitNexus-windows-net48-preview.zip`。
+    2. 完整解压 ZIP，在解压目录里双击 `LitNexus.exe`；保留同目录的 DLL 和其他依赖。
+    3. Preview 支持项目选择、基础配置、数据状态、CSV 导出和人工复筛导回；运行、统计、完整配置和数据库维护仍未完整实现。下文的完整工作流以 Mac 为准。
 
 === ":material-console: 源码构建"
 
     也支持使用源码构建的方式使用，如您不知道这是什么意思，则无需关注这里。
 
-    - Mac
-        1. 步骤1
-        2. 步骤2
-    - Windows
-        1. 步骤1
-        2. 步骤2
+    在源码仓库根目录打开终端。Mac 需要 Swift / Xcode Command Line Tools：
+
+    ```bash
+    cd mac
+    swift build
+    swift run LitNexus selftest
+    ./make_app.sh release
+    ```
+
+    应用包生成在 `mac/LitNexus.app`。Windows 开发环境见仓库 [Windows README](https://github.com/kiancai/LitNexus/tree/main/win)。
+
+    ```powershell
+    cd win
+    .\build.ps1 -Configuration Release -SelfTest
+    ```
 
 ---
 
@@ -38,7 +48,7 @@
 1. 启动 LitNexus  
 2. 选择 **新建** 或 **打开** 已有目录
 3. 最好选择空目录打开  
-3. 之后备份 / 换机：拷贝整个工作区目录即可  
+4. 备份 / 换机时，先完全退出应用，再复制整个工作区；运行中的数据库请使用应用内备份。
 
 !!! note "跨端注意"
     同一工作区可以在 Mac 与 Windows 间迁移，但 **不要两端同时写** 同一个带 SQLite/WAL 的目录。换机前请完全退出另一端。
@@ -65,8 +75,8 @@
 | AI（可选） | 要翻译 / 分类时配置方案与密钥；可稍后 |
 
 !!! abstract "默认流水线"
-    `download → merge → translate → classify → export`  
-    **导入复筛 CSV** 不在默认 run 里，在数据页单独做。
+    `download → merge → translate → classify`
+    CSV 导出和复筛导回在「数据」页单独执行。没有配置模型服务时，可先单独下载和合并。
 
 ---
 
@@ -81,11 +91,11 @@
     - 只写 `include`（`yes`/`no`）与 `tags`；空 `include` 不改原值  
     - 先预检，有冲突再确认；默认不覆盖已有标注  
 
-更细的规则以后会放在使用指南 / 现有 [人工复筛说明](../guide/manual-review.md)。
+导出范围与备份操作见[数据指南](../guide/data.md)，CSV 填写和冲突处理见[人工复筛说明](../guide/manual-review.md)。
 
 ---
 
-## 5. 自检（开发者可选）
+## 6. 自检（开发者可选）
 
 ```bash
 # Mac

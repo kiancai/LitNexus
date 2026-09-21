@@ -39,4 +39,12 @@ This section shows collected, reviewed, and included outcomes for journals in th
 
 Journal inclusion rates, prompt comparisons, and journal-list observations all depend on existing manual-review data. When the sample is small, manual review is incomplete, or question definitions change, treat them as clues requiring verification rather than automatic decisions.
 
-<!-- TODO: Add screenshots of each Statistics card, concrete filtering methods, and export examples. -->
+## Walk through a review
+
+1. Complete a batch of [human review](manual-review.md), then open Statistics to inspect updated counts.
+2. Switch the year chart between human review and an individual question. An AI “yes” is not a human inclusion decision.
+3. Search for a journal in the journal table and click headings to change sorting. Interpret inclusion rates alongside reviewed counts.
+4. Expand prompt evaluation, choose a question and comparison set, then export it. For example, inspect articles AI tends to include but humans exclude to assess whether a question is too broad.
+5. Keep the exported comparison before changing prompts. Follow [Settings](settings.md) to create a new question or handle old answers without mixing historical meanings.
+
+For old projects missing query-output data, rebuild search channels from retained merged files. Missing source files cannot be reconstructed into a complete query-hit history from article records alone. This page describes Mac; Windows Preview does not yet have a complete Statistics page.

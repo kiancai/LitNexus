@@ -27,4 +27,4 @@ cd win
 
 不要让 Mac 与 Windows 同时写同一个 SQLite/WAL 工作区；跨设备迁移应先退出客户端，再整体复制工作区或使用应用内数据库备份。
 
-见文档站：[多端策略](https://kiancai.github.io/LitNexus/architecture/platforms/) · [数据库契约](https://kiancai.github.io/LitNexus/architecture/database/) · [路线图](https://kiancai.github.io/LitNexus/roadmap/)。
+见文档站：[多端策略](https://kiancai.github.io/LitNexus/develop/platforms/) · [数据库契约](https://kiancai.github.io/LitNexus/reference/database/) · [路线图](https://kiancai.github.io/LitNexus/develop/roadmap/)。

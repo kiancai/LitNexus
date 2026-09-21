@@ -6,6 +6,11 @@ repo_name: kiancai/LitNexus
 
 docs_dir: docs
 site_dir: site
+hooks:
+  - .github/scripts/docs_redirects.py
+exclude_docs: |
+  start/showcase.md
+  start/showcase.en.md
 
 theme:
   name: material
@@ -85,13 +90,16 @@ plugins:
             - Get started:
                 - Installation & quick start: start/quickstart.md
                 - FAQ: start/faq.md
-                - Component samples: start/showcase.md
             - Guides:
                 - Initial setup: guide/setup.md
+                - Workspace: guide/workspace.md
                 - Run: guide/run.md
                 - Data: guide/data.md
                 - Statistics: guide/statistics.md
                 - Settings: guide/settings.md
+                - Search queries: guide/retrieval.md
+                - Manual review & CSV import: guide/manual-review.md
+                - Page help: guide/page-help.md
             - Concepts & reference:
                 - Product overview & motivation: reference/product.md
                 - Scope & boundaries: reference/scope.md
@@ -155,14 +163,16 @@ nav:
   - 开始使用:
       - 快速上手: start/quickstart.md
       - 常见问题: start/faq.md
-      - 组件示例（选型用）: start/showcase.md
   - 使用指南:
       - 首次设置: guide/setup.md
+      - 工作区: guide/workspace.md
       - 运行: guide/run.md
       - 数据: guide/data.md
       - 统计: guide/statistics.md
       - 配置: guide/settings.md
       - 检索式生成: guide/retrieval.md
+      - 人工复筛与 CSV 导入: guide/manual-review.md
+      - 页面帮助: guide/page-help.md
   - 原理与参考:
       - 产品概述与动机: reference/product.md
       - 目标与边界: reference/scope.md

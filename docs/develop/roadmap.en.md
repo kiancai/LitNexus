@@ -24,7 +24,7 @@ The current agreed development sequence (from 2026-07):
 
 - [ ] Review product motivation and boundaries ([overview](../reference/product.md), [scope](../reference/scope.md))
 - [ ] Make the pipeline, database, and workspace invariants explicit
-- [ ] Rewrite the user guide around the Mac desktop application
+- [x] Rewrite the user guide around Mac, align bilingual navigation and redirect legacy URLs
 - [ ] Define the Mac completion acceptance checklist (functional and interaction decisions)
 
 ### Stage 3 — Finish Mac
@@ -39,7 +39,8 @@ The current agreed development sequence (from 2026-07):
 - [x] Port headless `selftest` acceptance with workspace, SQLite, and CSV first
 - [x] Integrate project selection, basic configuration, and the safe data-review loop (status, CSV scope / column export, preflight confirmation import, automatic backup)
 - [ ] Recreate Run, Statistics, full Settings, and database maintenance pages after the Mac version is finalized
-- [ ] Windows CI, packaging, and clean-environment installation acceptance
+- [x] Windows CI build, self-test and Preview packaging workflow
+- [ ] Clean-environment Windows installation acceptance
 
 ## Product backlog
 

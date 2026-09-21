@@ -7,7 +7,7 @@ hide:
 
 ## 什么是 LitNexus
 
-LitNexus 可以一键实现，对指定时间范围内的、指定`期刊/作者/关键词`的文献的全覆盖检索与 AI 筛选
+LitNexus 按你设置的时间范围、期刊列表和 Europe PMC 检索式收集文献，支持 AI 翻译、初筛与人工复筛。Mac 是当前主产品，Windows 为功能有限的 Preview。
 
 ---
 
@@ -83,9 +83,8 @@ LitNexus 可以实现高度自定义的文献检索流！
     2. 通过自定义检索式，关注关键课题组所有文章
     3. 通过自定义检索式，补充关注特定领域内所有前两条没有覆盖的文章
 
-!!! success "LitNexus 的完整覆盖度"
-    1. 基于 Europe PMC 可以同步 PubMed 中的所有文章
-    2. 基于 Europe PMC 可以覆盖 *bioRxiv* 与 *ArXiv* 以及 *ResearchGate* 等预印本平台中的生物学相关文章
+!!! info "检索覆盖范围"
+    结果取决于 Europe PMC 已收录的记录、你的检索式和时间范围。LitNexus 不承诺覆盖所有出版平台或全文；可先在 Europe PMC 核对检索结果，再将检索式填入应用。
 
 ---
 
@@ -119,5 +118,4 @@ LitNexus 可以实现高度自定义的文献检索流！
     - [Releases](https://github.com/kiancai/LitNexus/releases)  
 
 </div>
-
 

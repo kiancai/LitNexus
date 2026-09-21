@@ -24,6 +24,9 @@ jobs:
       - name: Build docs
         run: mkdocs build --strict
 
+      - name: Check documentation links
+        run: python .github/scripts/docs_check.py
+
   windows-foundation:
     runs-on: windows-latest
     steps:
