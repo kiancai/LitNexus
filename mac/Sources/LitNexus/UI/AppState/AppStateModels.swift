@@ -10,6 +10,8 @@ enum Page: String, CaseIterable {
     case stats = "统计"
     case settings = "配置"
 
+    var navigationIndex: Int { Page.allCases.firstIndex(of: self) ?? 0 }
+
     /// 侧栏与页面标题共享同一套语义图标，避免同一页面出现两种视觉语言。
     var symbol: String {
         switch self {
@@ -248,4 +250,11 @@ struct PendingConfirm: Identifiable {
     let title: String
     let message: String
     let onResult: (_ approved: Bool, _ remember: Bool) -> Void
+}
+
+// 打开/新建工作区时，所选目录非空且不是工作区 → 等待用户决定如何初始化。
+struct PendingWorkspaceInit: Identifiable {
+    let id = UUID()
+    let parent: URL
+    let isDangerous: Bool
 }

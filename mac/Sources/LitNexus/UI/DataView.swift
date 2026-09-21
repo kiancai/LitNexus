@@ -11,11 +11,10 @@ struct DataView: View {
     @State private var isPreparingReviewImport = false
 
     var body: some View {
-        PageContainer {
-            VStack(alignment: .leading, spacing: 16) {
-                PageHeader(title: "数据", guide: PageGuides.data, symbol: Page.data.symbol)
+        VStack(alignment: .leading, spacing: 16) {
+            PageHeader(title: "数据", guide: PageGuides.data, symbol: Page.data.symbol)
 
-                Card {
+            Card {
                     HStack {
                         SectionTitle("状态")
                         Spacer()
@@ -92,9 +91,9 @@ struct DataView: View {
                     .disabled(isPreparingReviewImport)
                 }
 
-                databaseCard
-            }
+            databaseCard
         }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
         .onAppear {
             let saved = app.config.export.filter
             filter = ["all", "pending", "included", "excluded"].contains(saved) ? saved : "pending"
@@ -523,7 +522,7 @@ struct StatCard: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .surface(fill: Theme.panel2, cornerRadius: Theme.radius)
+        .surface(fill: Theme.panel2, cornerRadius: Theme.nestedCardRadius)
     }
 }
 

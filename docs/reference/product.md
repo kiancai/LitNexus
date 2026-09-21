@@ -30,4 +30,4 @@ AI 的 prompt / 分类问题写得好时，可大幅压缩人工阅读量；最�
 
 所有用户数据放在一个自包含目录（类似 Obsidian vault），便于备份、同步与跨机迁移，而不是散落在 `~/.config` 各处。
 
-详见 [工作区与配置](../architecture/workspace.md)。
+详见 [工作区与配置](workspace.md)。

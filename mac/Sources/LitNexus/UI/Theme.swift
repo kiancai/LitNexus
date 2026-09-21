@@ -54,6 +54,7 @@ enum Theme {
     static let panel = Color.dynamic(light: 0xFFFFFF, dark: 0x1E2120)
     static let panel2 = Color.dynamic(light: 0xF4F7F5, dark: 0x262A28)
     static let control = Color.dynamic(light: 0xFFFFFF, dark: 0x222624)
+    static let editorGutter = Color.dynamic(light: 0xE4ECE8, dark: 0x1C2320)
     static let line = Color.dynamic(light: 0xDFE5E1, dark: 0x303633)
     // 外层内容面比输入框/分隔线更清晰：同一层级统一使用这组边界与投影。
     static let surfaceLine = Color.dynamic(light: 0xCBD5CF, dark: 0x414A45)
@@ -70,7 +71,27 @@ enum Theme {
     static let amber = Color.dynamic(light: 0xC77A09, dark: 0xF0A52A)
     static let red = Color.dynamic(light: 0xD14646, dark: 0xF06A6A)
     static let cyan = Color.dynamic(light: 0x0B766B, dark: 0x5AD7C7)
-    static let radius: CGFloat = 14
+    /// 四个主体页面的主要内容卡片只使用这一种圆角。
+    /// 输入框、按钮和标签等内部控件使用各自更小的圆角以保留层级。
+    static let cardRadius: CGFloat = 14
+    /// 主卡内部可独立成组的内容容器；不得与输入框等普通控件混用。
+    static let nestedCardRadius: CGFloat = 10
+}
+
+/// 桌面端只使用短促、克制的导航动画；集中定义以避免各页自行漂移。
+enum AppMotion {
+    static let wizard = Animation.easeInOut(duration: 0.22)
+    static let navigation = Animation.easeInOut(duration: 0.24)
+    static let mainNavigationSelection = Animation.easeOut(duration: 0.14)
+    static let navigationExit = Animation.easeOut(duration: 0.10)
+    static let navigationEnter = Animation.easeOut(duration: 0.14)
+    static let navigationExitNanoseconds: UInt64 = 100_000_000
+    static let reduced = Animation.easeOut(duration: 0.12)
+}
+
+enum NavigationDirection {
+    case forward
+    case backward
 }
 
 /// 工作区的强调色调色板。
@@ -174,7 +195,7 @@ struct Card<Content: View>: View {
         VStack(alignment: .leading, spacing: 14) { content }
             .padding(20)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .surface(fill: Theme.panel, cornerRadius: Theme.radius)
+            .surface(fill: Theme.panel, cornerRadius: Theme.cardRadius)
     }
 }
 
@@ -197,7 +218,7 @@ private struct SurfaceStyle: ViewModifier {
 
 extension View {
     /// 主要信息卡片与运行页面板统一使用。`elevated` 仅用于当前任务等一级关键面板。
-    func surface(fill: Color = Theme.panel, cornerRadius: CGFloat = Theme.radius, elevated: Bool = false) -> some View {
+    func surface(fill: Color = Theme.panel, cornerRadius: CGFloat = Theme.cardRadius, elevated: Bool = false) -> some View {
         modifier(SurfaceStyle(fill: fill, cornerRadius: cornerRadius, elevated: elevated))
     }
 }

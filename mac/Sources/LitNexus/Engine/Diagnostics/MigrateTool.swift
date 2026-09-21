@@ -18,7 +18,7 @@ enum MigrateTool {
         defer { try? FileManager.default.removeItem(at: tmp) }
 
         do {
-            // 全新工作区（不设为活动），默认配置 → q1/q2 + include/tags 列齐备
+            // 全新工作区（不设为活动），默认配置 → q1 + include/tags 列齐备
             let ws = try WorkspaceStore.create(tmp, makeActive: false)
             let cfg = try ConfigStore.load(ws.configPath)
             let db = try Database(path: ws.dbPath, config: cfg)

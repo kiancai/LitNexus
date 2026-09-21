@@ -3,39 +3,45 @@ import Foundation
 // 新工作区的默认模板内容。
 
 enum Templates {
-    static let defaultQuestions: [Question] = [
-        Question(
-            id: "q1",
-            nickname: "生物医学领域",
-            text: """
-            请判断本文是否属于'计算生物学、生物信息学、生物医学'或相关交叉领域。\
-            若文章属于以下任一类型，请回答'是'：(1) 涉及组学数据（基因/蛋白/代谢等）的分析或实验研究；\
-            (2) 涉及生物算法、模型、软件工具或数据库的开发与应用；\
-            (3) 对上述相关领域的综述、系统评价、进展总结或观点展望。\
-            仅当文章是纯粹的临床护理个案、社会学调查、或完全不涉及生物医学背景的纯数学/计算机理论时，才回答'否'。
-            """
-        ),
-        Question(
-            id: "q2",
-            nickname: "核心方向",
-            text: """
-            请判断本文是否属于以下任一核心关注领域（命中任意一项即回答'是'）：\
-            (a) 微生物组学（Microbiome）；(b) 生物基础模型与生成式AI；(c) 生物医学机器学习应用；\
-            (d) 病毒与病原体计算；(e) 生物信息核心工具。若均不属于，回答'否'。
-            """
-        ),
-    ]
+    static let defaultQuestion = Question(
+        id: "q1",
+        nickname: "是否属于生物医学领域",
+        text: """
+        请判断本文是否属于'计算生物学、生物信息学、生物医学'或相关交叉领域。\
+        若文章属于以下任一类型，请回答'是'：(1) 涉及组学数据（基因/蛋白/代谢等）的分析或实验研究；\
+        (2) 涉及生物算法、模型、软件工具或数据库的开发与应用；\
+        (3) 对上述相关领域的综述、系统评价、进展总结或观点展望。\
+        仅当文章是纯粹的临床护理个案、社会学调查、或完全不涉及生物医学背景的纯数学/计算机理论时，才回答'否'。
+        """
+    )
+
+    /// 新项目只给一个通用起点；首次设置可自行添加更多独立问题。
+    static let defaultQuestions: [Question] = [defaultQuestion]
+
+    // 曾经随新项目写入的第二道示例题。它不再是模板；只在“尚未建库”的首次设置中
+    // 用作精确识别，移除旧版本遗留的未修改示例，不触碰已有项目的分类定义或答案。
+    private static let legacyDefaultFocusQuestionText = """
+    请判断本文是否属于以下任一核心关注领域（命中任意一项即回答'是'）：\
+    (a) 微生物组学（Microbiome）；(b) 生物基础模型与生成式AI；(c) 生物医学机器学习应用；\
+    (d) 病毒与病原体计算；(e) 生物信息核心工具。若均不属于，回答'否'。
+    """
+
+    static func isLegacyDefaultFocusQuestion(_ question: Question) -> Bool {
+        guard question.id == "q2",
+              ["核心方向", "是否为关注的方向"].contains(question.nickname),
+              question.text == legacyDefaultFocusQuestionText else { return false }
+        return question.classify && question.export && !question.archived
+            && question.classifyAfterRowID == nil
+    }
 
     // 期刊/关键词现统一存进 litnexus.toml（[download].journals / .keywords 数组）。
     // 下面是新项目的默认行（含注释行，下载时会跳过 # 和空行）。
     static let defaultJournalLines = [
-        "# 每行一个期刊名，需与 Europe PMC 中的名称完全一致；# 开头为注释、空行忽略。",
-        "# 下面是示例，请按需增删：",
-        "Nature", "Bioinformatics", "Genome Biology", "Nucleic Acids Research",
+        "# 每行一个期刊名，下面是示例，可按需增删：",
+        "Nature", "Nucleic Acids Research",
     ]
     static let defaultKeywordLines = [
-        "# 每行一个 Europe PMC 检索式，支持布尔语法（AND/OR/NOT）与引号短语；# 开头为注释。",
-        "# 下面是示例，请按需增删：",
+        "# 每行一个 Europe PMC 检索式，下面是示例，可按需增删：",
         "(microbiome OR microbiota) AND \"machine learning\"",
         "\"single cell\" AND (deep learning OR neural network)",
     ]

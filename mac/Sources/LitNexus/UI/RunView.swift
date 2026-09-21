@@ -10,15 +10,14 @@ struct RunView: View {
     private var showRecords: Bool { app.isRunning || !app.runRecords.isEmpty }
 
     var body: some View {
-        PageContainer {
-            VStack(alignment: .leading, spacing: 16) {
-                runHeader
-                runControlDeck
-                workflow
+        VStack(alignment: .leading, spacing: 16) {
+            runHeader
+            runControlDeck
+            workflow
 
-                if showRecords { runRecordsPanel }
-            }
+            if showRecords { runRecordsPanel }
         }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
         .sheet(item: $app.pendingConfirm) { c in ConfirmSheet(confirm: c) }
         .onAppear { updateRecordExpansionForCurrentState() }
         .onChange(of: app.isRunning) { _ in updateRecordExpansionForCurrentState() }
@@ -65,7 +64,7 @@ struct RunView: View {
             }
         }
         .padding(20)
-        .surface(fill: Theme.panel, cornerRadius: 16, elevated: true)
+        .surface(fill: Theme.panel, elevated: true)
     }
 
     private var runStateBadge: some View {
@@ -93,17 +92,29 @@ struct RunView: View {
 
     private var dayWindowControl: some View {
         VStack(alignment: .leading, spacing: 5) {
-            Text("时间窗口")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(Theme.muted)
+            HStack(spacing: 3) {
+                Text("时间窗口")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Theme.muted)
+                InlineHelpButton(
+                    title: "下载时间窗口",
+                    text: "按首次发表日期抓取最近 N 天的文献。新项目默认为 14 天；修改后会保存为当前项目的默认值，以后运行及重新打开项目时继续使用，直到再次修改。它只影响后续下载，不会删除或改写已入库文献。",
+                    width: 320
+                )
+            }
 
             HStack(spacing: 6) {
                 Text("最近").foregroundStyle(Theme.muted)
-                TextField("", value: $app.downloadDays, format: .number)
+                TextField("", value: Binding(
+                    get: { app.downloadDays },
+                    set: { app.setDownloadDays($0) }
+                ), format: .number)
                     .frame(width: 48)
                     .textFieldStyle(.roundedBorder)
                     .multilineTextAlignment(.trailing)
                     .accessibilityLabel("最近天数")
+                    .help("修改后自动保存为当前项目的默认时间窗口")
+                    .disabled(app.isRunning)
                 Text("天").foregroundStyle(Theme.muted)
             }
             .font(.system(size: 13))
@@ -190,7 +201,7 @@ struct RunView: View {
                 .padding(14)
                 .padding(.bottom, 10)
         }
-        .surface(fill: Theme.panel, cornerRadius: 16)
+        .surface(fill: Theme.panel)
     }
 
     // 运行记录：默认只显示结构化摘要。原始诊断在用户主动切到「技术详情」时才显示，
@@ -256,7 +267,7 @@ struct RunView: View {
                 runRecordList
             }
         }
-        .surface(fill: Theme.panel, cornerRadius: 14)
+        .surface(fill: Theme.panel)
     }
 
     @ViewBuilder private var runRecordList: some View {
@@ -545,7 +556,7 @@ struct TimelineRow: View {
         .padding(.vertical, step.status == .running ? 10 : 7)
         .background {
             if step.status == .running {
-                RoundedRectangle(cornerRadius: 10)
+                RoundedRectangle(cornerRadius: Theme.nestedCardRadius, style: .continuous)
                     .fill(palette.accentSoft.opacity(0.45))
             }
         }

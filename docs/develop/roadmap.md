@@ -22,7 +22,7 @@
 
 ### 阶段 2 — 写清文档，理顺软件目的
 
-- [ ] 产品动机与边界评审（[概述](product/overview.md)、[边界](product/scope.md)）
+- [ ] 产品动机与边界评审（[概述](../reference/product.md)、[边界](../reference/scope.md)）
 - [ ] 流水线、库表、工作区不变量写死
 - [ ] 使用手册按 Mac 桌面为主重写
 - [ ] 明确 Mac 收尾验收清单（功能 + 交互已定项）

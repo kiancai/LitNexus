@@ -157,7 +157,7 @@ enum ArticleIO {
     }
 
     /// 导出查询结果到 CSV（utf-8-sig，排除 excludeColumns 列）。返回行数。
-    /// headerMap 把内部列名映射成人类可读表头（如 q1_ans → 生物医学领域 · 答案）。
+    /// headerMap 把内部列名映射成人类可读表头（如 q1_ans → 是否属于生物医学领域 · 答案）。
     @discardableResult
     static func exportCSV(columns: [String], rows: [[String: DBValue]], to output: URL,
                           excludeColumns: [String], headerMap: [String: String] = [:]) throws -> Int {

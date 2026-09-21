@@ -22,10 +22,11 @@ final class AppState: ObservableObject {
     @Published var stats: [String: Int] = [:]
     @Published var toast: String?
     @Published var pendingConfirm: PendingConfirm?
+    @Published var pendingInit: PendingWorkspaceInit?
     @Published var importPlan: ImportPlan?
 
     @Published var downloadMode = "all"
-    @Published var downloadDays = 30
+    @Published var downloadDays = DownloadConfig.defaultDays
     @Published var steps: [PipelineStep] = [
         PipelineStep(id: "download", name: "下载文献", subtitle: "从 Europe PMC 按期刊/关键词抓取"),
         PipelineStep(id: "merge", name: "合并入库", subtitle: "解析并去重写入数据库"),

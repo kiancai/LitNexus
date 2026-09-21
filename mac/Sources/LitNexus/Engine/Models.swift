@@ -4,12 +4,30 @@ import Foundation
 // 无默认值的 AI 接口要求用户自行填写（不内置任何服务商）。
 
 struct DownloadConfig: Equatable {
-    var days: Int = 30
-    var pageSize: Int = 1000
-    var requestDelay: Double = 0.5
+    static let defaultDays = 14
+    static let defaultPageSize = 1000
+    static let defaultRequestDelay = 0.5
+    static let pageSizeRange = 1 ... 1000
+
+    var days: Int = DownloadConfig.defaultDays
+    var pageSize: Int = DownloadConfig.defaultPageSize
+    var requestDelay: Double = DownloadConfig.defaultRequestDelay
     // 期刊与关键词检索式现统一存进配置（数组，每元素一行，含注释行）。下载时过滤 # 与空行。
     var journals: [String] = Templates.defaultJournalLines
     var keywords: [String] = Templates.defaultKeywordLines
+
+    static func normalizedDays(_ value: Int) -> Int {
+        max(1, value)
+    }
+
+    static func normalizedPageSize(_ value: Int) -> Int {
+        min(max(value, pageSizeRange.lowerBound), pageSizeRange.upperBound)
+    }
+
+    static func normalizedRequestDelay(_ value: Double) -> Double {
+        guard value.isFinite else { return defaultRequestDelay }
+        return max(0, value)
+    }
 }
 
 struct AIConfig: Equatable {
@@ -24,7 +42,7 @@ struct AIConfig: Equatable {
 // 一个具名的 AI 配置方案。用户可保存多个，选其一作为当前使用。
 struct AIProfile: Identifiable, Equatable {
     var id: String = UUID().uuidString
-    var name: String = "新方案"
+    var name: String = "新服务"
     var baseURL: String = ""
     var model: String = ""
     var apiKey: String = ""
@@ -116,7 +134,7 @@ struct ClassifyConfig: Equatable {
     var questions: [Question] = Templates.defaultQuestions
     /// 下一个可分配的 `q<N>` 数字。它是高水位而非“当前问题数”，因此即使永久删除
     /// 问题，也绝不会复用旧 id。旧项目未保存该字段时从现存 id 推断并在下次保存时写入。
-    var nextQuestionNumber: Int = 3
+    var nextQuestionNumber: Int = 2
 
     /// 兼容只读调用的“下一个候选 id”。真正创建问题必须调用 `allocateQuestionID()`，
     /// 才会推进持久化的高水位。
@@ -219,7 +237,7 @@ enum Identifier {
 
 // 桌面端运行时使用的有效 AI 配置。
 extension AppConfig {
-    // 桌面应用：完全以界面所选 AI 方案为准，不读取任何环境变量
+    // 桌面应用：完全以界面所选模型服务为准，不读取任何环境变量
     // （避免旧环境变量悄悄顶替用户输入，这类行为在桌面端是反直觉的）。
     var resolvedAI: AIConfig { ai }
 }

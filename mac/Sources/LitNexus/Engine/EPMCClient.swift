@@ -8,6 +8,7 @@ enum EPMCClient {
     static let pageBackoff = 3.0   // 每次重试固定等待 3 秒
 
     static func buildDateQuery(days: Int) -> String {
+        let days = DownloadConfig.normalizedDays(days)
         let start = Calendar.current.date(byAdding: .day, value: -days, to: Date()) ?? Date()
         let fmt = DateFormatter()
         fmt.dateFormat = "yyyy-MM-dd"
@@ -23,6 +24,8 @@ enum EPMCClient {
     /// 对单个 query 分页抓取，写入 fileHandle（JSONL）。返回 (总数, 是否完整)。
     static func fetchArticles(query: String, label: String, cfg: DownloadConfig,
                               fileHandle: FileHandle, reporter: ProgressReporter?) -> (total: Int, complete: Bool) {
+        let pageSize = DownloadConfig.normalizedPageSize(cfg.pageSize)
+        let requestDelay = DownloadConfig.normalizedRequestDelay(cfg.requestDelay)
         var cursorMark = "*"
         var page = 1
         var total = 0
@@ -34,7 +37,7 @@ enum EPMCClient {
             comps.queryItems = [
                 URLQueryItem(name: "query", value: query),
                 URLQueryItem(name: "format", value: "json"),
-                URLQueryItem(name: "pageSize", value: String(cfg.pageSize)),
+                URLQueryItem(name: "pageSize", value: String(pageSize)),
                 URLQueryItem(name: "resultType", value: "core"),
                 URLQueryItem(name: "cursorMark", value: cursorMark),
                 URLQueryItem(name: "sort_date", value: "y"),
@@ -84,7 +87,7 @@ enum EPMCClient {
             if next == nil || next == cursorMark { break }
             cursorMark = next!
             page += 1
-            Thread.sleep(forTimeInterval: cfg.requestDelay)
+            if requestDelay > 0 { Thread.sleep(forTimeInterval: requestDelay) }
         }
 
         return (total, complete)
@@ -102,7 +105,7 @@ enum EPMCClient {
     static func runDownload(config cfg: AppConfig, workspace ws: Workspace,
                             mode: String = "all", days: Int? = nil,
                             reporter: ProgressReporter? = nil) throws -> DownloadResult {
-        let days = days ?? cfg.download.days
+        let days = DownloadConfig.normalizedDays(days ?? cfg.download.days)
         let dateQuery = buildDateQuery(days: days)
         try ws.ensureDirs()
         let ts = timestamp()

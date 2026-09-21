@@ -24,25 +24,24 @@ struct StatsView: View {
     @State private var loadingInsights: Set<StatsInsight> = []
 
     var body: some View {
-        PageContainer {
-            VStack(alignment: .leading, spacing: 16) {
-                pageHeader
+        VStack(alignment: .leading, spacing: 16) {
+            pageHeader
 
-                if let bundle {
-                    overviewCard(bundle)
+            if let bundle {
+                overviewCard(bundle)
 
-                    if (bundle.overview["total"] ?? 0) > 0 {
-                        orderedCards(bundle)
-                    } else {
-                        emptyDatabaseCard
-                    }
-                } else if isInitialLoading {
-                    loadingSkeleton
+                if (bundle.overview["total"] ?? 0) > 0 {
+                    orderedCards(bundle)
                 } else {
-                    unavailableCard
+                    emptyDatabaseCard
                 }
+            } else if isInitialLoading {
+                loadingSkeleton
+            } else {
+                unavailableCard
             }
         }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
         .onAppear {
             if bundle == nil { load() }
         }
@@ -160,7 +159,7 @@ struct StatsView: View {
                 EmptyView()
             }
             .rotationEffect(.degrees(wiggleAngle(for: card)))
-            .contentShape(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous))
             .onDrag {
                 draggingCard = card
                 return NSItemProvider(object: card.rawValue as NSString)
@@ -555,7 +554,7 @@ struct StatsView: View {
             }
             .frame(height: 380)
             .background(Theme.panel2.opacity(0.45))
-            .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: Theme.nestedCardRadius, style: .continuous))
         }
     }
 
@@ -767,7 +766,7 @@ struct StatsView: View {
         }
         .padding(12)
         .background(Theme.panel2.opacity(0.55))
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: Theme.nestedCardRadius, style: .continuous))
     }
 
     private func promptEvaluationMetric(
@@ -791,7 +790,7 @@ struct StatsView: View {
         .padding(11)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.panel.opacity(0.72))
-        .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: Theme.nestedCardRadius, style: .continuous))
     }
 
     private func promptEvaluationList(_ records: [PromptEvaluationRecord]) -> some View {
@@ -930,7 +929,7 @@ struct StatsView: View {
                 }
                 .frame(maxHeight: 360)
                 .background(Theme.panel2.opacity(0.45))
-                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: Theme.nestedCardRadius, style: .continuous))
             }
         }
     }
@@ -966,7 +965,7 @@ struct StatsView: View {
             }
             .frame(maxHeight: 360)
             .background(Theme.panel2.opacity(0.45))
-            .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: Theme.nestedCardRadius, style: .continuous))
         }
     }
 
@@ -1015,7 +1014,7 @@ struct StatsView: View {
                 SectionTitle("总览")
                 HStack(spacing: 12) {
                     ForEach(0..<4, id: \.self) { _ in
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        RoundedRectangle(cornerRadius: Theme.nestedCardRadius, style: .continuous)
                             .fill(Theme.panel2)
                             .frame(maxWidth: .infinity)
                             .frame(height: 104)

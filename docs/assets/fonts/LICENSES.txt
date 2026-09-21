@@ -1,0 +1,14 @@
+LitNexus documentation font notices
+===================================
+
+Body text uses the reader's system UI fonts (no self-hosted CJK webfont).
+
+JetBrains Mono Variable
+-----------------------
+File: JetBrainsMono-Variable.woff2
+Source package: @fontsource-variable/jetbrains-mono 5.2.8
+Upstream project: https://github.com/JetBrains/JetBrainsMono
+License: SIL Open Font License, Version 1.1 (OFL-1.1)
+
+This code font is served from the documentation site. The browser does not
+request a third-party font CDN at runtime.

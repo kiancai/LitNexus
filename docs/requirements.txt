@@ -1,2 +1,3 @@
-# 文档站依赖（与应用运行时无关）
-mkdocs-material>=9.5
+mkdocs==1.6.1
+mkdocs-material==9.7.6
+mkdocs-static-i18n==1.3.1

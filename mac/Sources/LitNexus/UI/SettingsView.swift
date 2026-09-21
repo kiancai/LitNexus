@@ -8,6 +8,7 @@ private enum SettingsSection: String, CaseIterable, Identifiable {
     case project
 
     var id: Self { self }
+    var navigationIndex: Int { SettingsSection.allCases.firstIndex(of: self) ?? 0 }
 
     var title: String {
         switch self {
@@ -33,11 +34,12 @@ private enum SettingsSection: String, CaseIterable, Identifiable {
 struct SettingsView: View {
     @EnvironmentObject var app: AppState
     @Environment(\.accentPalette) private var palette
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var section: SettingsSection = .appearance
+    @State private var sectionDirection: NavigationDirection = .forward
     @State private var journals = ""
     @State private var keywords = ""
-    @State private var days = 30
     @State private var pageSize = 1000
     @State private var requestDelay = 0.5
     @State private var batchSize = 30
@@ -52,13 +54,19 @@ struct SettingsView: View {
     @State private var scheduledSave: DispatchWorkItem?
 
     var body: some View {
-        PageContainer {
-            VStack(alignment: .leading, spacing: 16) {
-                PageHeader(title: "配置", guide: PageGuides.settings, symbol: Page.settings.symbol)
-                SettingsSectionRail(selection: sectionBinding)
+        VStack(alignment: .leading, spacing: 16) {
+            PageHeader(title: "配置", guide: PageGuides.settings, symbol: Page.settings.symbol)
+            SettingsSectionRail(selection: sectionBinding)
+            ZStack(alignment: .topLeading) {
                 sectionContent
+                    .id(section)
+                    .transition(sectionTransition)
             }
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            // 标签内容独立过渡，不让窗口与页面容器继承动画事务。
+            .animation(reduceMotion ? AppMotion.reduced : AppMotion.navigation, value: section)
         }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
         .onAppear(perform: load)
         .onChange(of: persistenceSignature) { _ in schedulePersist() }
         .onDisappear {
@@ -77,13 +85,23 @@ struct SettingsView: View {
         }
     }
 
+    private var sectionTransition: AnyTransition {
+        guard !reduceMotion else { return .opacity }
+        let direction: CGFloat = sectionDirection == .forward ? 1 : -1
+        return .asymmetric(
+            insertion: .opacity.combined(with: .offset(x: 12 * direction, y: 0)),
+            removal: .opacity.combined(with: .offset(x: -6 * direction, y: 0))
+        )
+    }
+
     private var sectionBinding: Binding<SettingsSection> {
         Binding(
             get: { section },
             set: { next in
                 guard next != section else { return }
                 persist()
-                withAnimation(.easeInOut(duration: 0.16)) { section = next }
+                sectionDirection = next.navigationIndex > section.navigationIndex ? .forward : .backward
+                section = next
             }
         )
     }
@@ -91,9 +109,6 @@ struct SettingsView: View {
     private var appearanceContent: some View {
         Card {
             SectionTitle("外观")
-            Text("显示模式只保存在当前设备；项目强调色会随项目一起保存。")
-                .font(.system(size: 13)).foregroundStyle(Theme.muted)
-
             Picker("显示模式", selection: Binding(
                 get: { app.appearance },
                 set: { app.setAppearance($0) })) {
@@ -136,10 +151,6 @@ struct SettingsView: View {
                     .buttonStyle(OutlineButtonStyle())
                     .disabled(app.config.theme.accentHue == nil)
             }
-
-            Text("色盘只保存色相；浅色和深色所需的明度与对比度会自动推导，并写入项目的 litnexus.toml。")
-                .font(.system(size: 12))
-                .foregroundStyle(Theme.muted)
         }
     }
 
@@ -163,10 +174,17 @@ struct SettingsView: View {
             }
 
             Card {
-                SectionTitle("下载参数")
-                numberRow("下载最近天数", $days)
-                numberRow("每页数量", $pageSize)
-                doubleRow("请求间隔（秒）", $requestDelay)
+                HStack(spacing: 5) {
+                    SectionTitle("下载请求参数")
+                    InlineHelpButton(
+                        title: "下载请求参数",
+                        text: "“每页文献数”是每次 Europe PMC 分页请求返回的条数，有效范围为 1–1,000，通常建议 100–1,000；网络不稳定时可降低。“分页间隔”是同一检索式连续翻页时两次请求之间的等待，默认 0.5 秒，通常建议 0.2–1 秒；出现限流或超时时可增大。两项都不会改变检索范围或历史数据。",
+                        width: 340
+                    )
+                    Spacer(minLength: 0)
+                }
+                numberRow("每页文献数", $pageSize)
+                doubleRow("分页间隔（秒）", $requestDelay)
             }
         }
     }
@@ -253,18 +271,20 @@ struct SettingsView: View {
         loaded = true
         let c = app.config
         journals = app.readJournals(); keywords = app.readKeywords()
-        days = c.download.days; pageSize = c.download.pageSize; requestDelay = c.download.requestDelay
+        pageSize = c.download.pageSize; requestDelay = c.download.requestDelay
         batchSize = c.translate.batchSize; concurrency = c.translate.concurrency
         translateAbstract = c.translate.translateAbstract; abstractBatchSize = c.translate.abstractBatchSize
         maxWorkers = c.classify.maxWorkers; classifyBatchSize = c.classify.batchSize; classifyAttempts = c.classify.maxAttempts
         customColumns = c.schema.customColumns.joined(separator: ", ")
     }
 
-    // 自动保存非 AI 设置（AI 方案由各自的增删选/编辑即时持久化，此处从 app.config 继承不覆盖）。
+    // 自动保存非模型服务设置（模型服务由各自的增删选/编辑即时持久化，此处从 app.config 继承不覆盖）。
     private func persist() {
         guard loaded else { return }
         var c = app.config   // 分类问题由 QuestionsCard 即时持久化，这里不覆盖
-        c.download.days = days; c.download.pageSize = pageSize; c.download.requestDelay = requestDelay
+        pageSize = DownloadConfig.normalizedPageSize(pageSize)
+        requestDelay = DownloadConfig.normalizedRequestDelay(requestDelay)
+        c.download.pageSize = pageSize; c.download.requestDelay = requestDelay
         c.translate.batchSize = batchSize; c.translate.concurrency = concurrency
         c.translate.translateAbstract = translateAbstract; c.translate.abstractBatchSize = abstractBatchSize
         c.classify.maxWorkers = maxWorkers; c.classify.batchSize = classifyBatchSize; c.classify.maxAttempts = classifyAttempts
@@ -283,7 +303,7 @@ struct SettingsView: View {
     private var persistenceSignature: String {
         [
             journals, keywords,
-            String(days), String(pageSize), String(requestDelay),
+            String(pageSize), String(requestDelay),
             String(batchSize), String(concurrency),
             String(translateAbstract), String(abstractBatchSize),
             String(maxWorkers), String(classifyBatchSize), String(classifyAttempts),
@@ -303,10 +323,7 @@ struct SettingsView: View {
             .padding(8).background(Theme.panel2).clipShape(RoundedRectangle(cornerRadius: 8))
     }
     @ViewBuilder private func editor(_ b: Binding<String>, height: CGFloat) -> some View {
-        TextEditor(text: b)
-            .font(.system(size: 13, design: .monospaced)).scrollContentBackground(.hidden)
-            .padding(6).frame(height: height)
-            .background(Theme.panel2).clipShape(RoundedRectangle(cornerRadius: 8))
+        LinedEditorField(text: b, height: height)
     }
     @ViewBuilder private func numberRow(_ t: String, _ b: Binding<Int>) -> some View {
         HStack {
@@ -334,6 +351,8 @@ struct SettingsView: View {
 private struct SettingsSectionRail: View {
     @Binding var selection: SettingsSection
     @Environment(\.accentPalette) private var palette
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Namespace private var selectionAnimation
 
     var body: some View {
         GeometryReader { proxy in
@@ -346,9 +365,9 @@ private struct SettingsSectionRail: View {
             }
         }
         .frame(height: 52)
-        .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(Theme.panel2.opacity(0.68)))
+        .background(RoundedRectangle(cornerRadius: Theme.nestedCardRadius, style: .continuous).fill(Theme.panel2.opacity(0.68)))
         .overlay(
-            RoundedRectangle(cornerRadius: 11, style: .continuous)
+            RoundedRectangle(cornerRadius: Theme.nestedCardRadius, style: .continuous)
                 .stroke(Theme.line.opacity(0.82), lineWidth: 1)
         )
     }
@@ -362,18 +381,20 @@ private struct SettingsSectionRail: View {
                     selection = item
                 } label: {
                     Label(item.title, systemImage: item.symbol)
-                        .font(.system(size: 13, weight: selected ? .semibold : .medium))
+                        .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(selected ? Theme.fg : Theme.muted)
                         .frame(maxWidth: expandsToFillRail ? .infinity : nil, minHeight: 42)
                         .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                        .background(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .fill(selected ? palette.accentSoft : Color.clear)
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .stroke(selected ? palette.accentLine.opacity(0.72) : Color.clear, lineWidth: 1)
-                        )
+                        .background {
+                            if selected {
+                                if reduceMotion {
+                                    selectionPill
+                                } else {
+                                    selectionPill
+                                        .matchedGeometryEffect(id: "settings-selection", in: selectionAnimation)
+                                }
+                            }
+                        }
                 }
                 .buttonStyle(.plain)
                 .frame(maxWidth: expandsToFillRail ? .infinity : nil)
@@ -383,10 +404,20 @@ private struct SettingsSectionRail: View {
         }
         .padding(4)
         .frame(maxWidth: expandsToFillRail ? .infinity : nil)
+        .animation(reduceMotion ? nil : AppMotion.navigation, value: selection)
+    }
+
+    private var selectionPill: some View {
+        RoundedRectangle(cornerRadius: 8, style: .continuous)
+            .fill(palette.accentSoft)
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(palette.accentLine.opacity(0.72), lineWidth: 1)
+            )
     }
 }
 
-// ── 分类问题卡片：每个问题独立配置（昵称 / 完整问题 / AI处理 / 导出 / 归档）──
+// ── 分类问题卡片：每个问题独立配置（问题昵称 / 问题内容 / AI处理 / 导出 / 归档）──
 
 struct QuestionsCard: View {
     @EnvironmentObject var app: AppState
@@ -412,7 +443,7 @@ struct QuestionsCard: View {
                 )
                 Spacer(minLength: 0)
             }
-            Text(verbatim: "每个当前问题独立配置。「AI 处理」决定是否让 AI 跑这个问题；「导出」决定是否写入导出的 CSV；昵称用作导出表头。")
+            Text(verbatim: "每个当前问题独立配置。「AI 处理」决定是否让 AI 跑这个问题；「导出」决定是否写入导出的 CSV；问题昵称用作导出表头。")
                 .font(.system(size: 13)).foregroundStyle(Theme.muted)
 
             if activeQuestions.isEmpty {
@@ -492,6 +523,7 @@ struct QuestionEditor: View {
     let onArchive: (Question) -> Void
 
     @State private var draft = ""
+    @State private var nicknameDraft = ""
     @State private var loaded = false
     @State private var showGate = false
     @State private var showHistoricalBackfillConfirm = false
@@ -501,9 +533,10 @@ struct QuestionEditor: View {
     var body: some View {
         if let q = question, let binding = app.questionBinding(id) {
             let dirty = draft != q.text
+            let nicknameDirty = nicknameDraft != q.nickname
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 8) {
-                    TextField("昵称（导出表头）", text: binding.nickname).textFieldStyle(.plain).lineLimit(1)
+                    TextField("问题昵称", text: $nicknameDraft).textFieldStyle(.plain).lineLimit(1)
                         .padding(7).background(Theme.panel2).clipShape(RoundedRectangle(cornerRadius: 6))
                         .frame(maxWidth: 220)
                     Spacer()
@@ -517,6 +550,22 @@ struct QuestionEditor: View {
                     .help("停止未来处理，保留历史答案与理由")
                 }
 
+                if nicknameDirty {
+                    HStack(spacing: 8) {
+                        if nicknameDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            Text("问题昵称不能为空")
+                                .font(.system(size: 12)).foregroundStyle(Theme.red)
+                        }
+                        Spacer()
+                        Button("放弃") { nicknameDraft = q.nickname }
+                            .buttonStyle(.bordered).controlSize(.small)
+                        Button("保存问题昵称") { saveNickname() }
+                            .buttonStyle(.borderedProminent).controlSize(.small).tint(palette.accent)
+                            .disabled(nicknameDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+                }
+
+                Text("问题内容").font(.system(size: 12, weight: .medium)).foregroundStyle(Theme.muted)
                 TextEditor(text: $draft)
                     .font(.system(size: 13, design: .monospaced)).scrollContentBackground(.hidden)
                     .padding(6).frame(height: 80)
@@ -551,9 +600,15 @@ struct QuestionEditor: View {
             }
             .padding(12)
             .background(Theme.panel2.opacity(0.5))
-            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.line, lineWidth: 1))
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-            .onAppear { if !loaded { draft = q.text; loaded = true } }
+            .overlay(RoundedRectangle(cornerRadius: Theme.nestedCardRadius, style: .continuous).stroke(Theme.line, lineWidth: 1))
+            .clipShape(RoundedRectangle(cornerRadius: Theme.nestedCardRadius, style: .continuous))
+            .onAppear {
+                if !loaded {
+                    draft = q.text
+                    nicknameDraft = q.nickname
+                    loaded = true
+                }
+            }
             .confirmationDialog("该问题已有答案，如何处理这次文本修改？", isPresented: $showGate, titleVisibility: .visible) {
                 Button("新建为新问题（推荐）") {
                     app.replaceQuestionWithNew(oldId: id, newText: draft); draft = q.text
@@ -586,6 +641,13 @@ struct QuestionEditor: View {
         if app.questionHasAnswers(id) { showGate = true }
         else { app.updateQuestionText(id, draft) }
     }
+
+    private func saveNickname() {
+        let cleanNickname = nicknameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanNickname.isEmpty else { return }
+        app.updateQuestionNickname(id, cleanNickname)
+        nicknameDraft = cleanNickname
+    }
 }
 
 /// 新问题必须在创建前明确其覆盖范围，避免空白问题或“新增后悄悄扫描全库”的隐式行为。
@@ -605,7 +667,7 @@ private struct NewQuestionSheet: View {
                 .foregroundStyle(Theme.fg)
 
             VStack(alignment: .leading, spacing: 5) {
-                Text("昵称（用于列表和导出表头）")
+                Text("问题昵称")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(Theme.muted)
                 TextField("例如：目标疾病相关性", text: $nickname)
@@ -616,7 +678,7 @@ private struct NewQuestionSheet: View {
             }
 
             VStack(alignment: .leading, spacing: 5) {
-                Text("完整问题")
+                Text("问题内容")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(Theme.muted)
                 TextEditor(text: $text)
@@ -663,13 +725,18 @@ private struct NewQuestionSheet: View {
     }
 
     private func createQuestion() {
+        let cleanNickname = nickname.trimmingCharacters(in: .whitespacesAndNewlines)
         let cleanText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanNickname.isEmpty else {
+            validationMessage = "请填写问题昵称。"
+            return
+        }
         guard !cleanText.isEmpty else {
-            validationMessage = "请先填写完整问题；空问题不会被创建。"
+            validationMessage = "请填写问题内容。"
             return
         }
         let id = app.addQuestion(
-            nickname: nickname.trimmingCharacters(in: .whitespacesAndNewlines),
+            nickname: cleanNickname,
             text: cleanText,
             coverage: coverage
         )
@@ -735,10 +802,10 @@ private struct ArchivedQuestionRow: View {
         .padding(11)
         .background(Theme.panel2.opacity(0.45))
         .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
+            RoundedRectangle(cornerRadius: Theme.nestedCardRadius, style: .continuous)
                 .stroke(Theme.line, lineWidth: 1)
         )
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: Theme.nestedCardRadius, style: .continuous))
     }
 }
 
@@ -830,7 +897,7 @@ private struct QuestionPermanentDeleteSheet: View {
     }
 }
 
-// ── AI 方案卡片：可保存多个方案，选择其一用于翻译与分类 ───────────────────────
+// ── 模型服务卡片：可保存多个服务，选择其一用于翻译与分类 ───────────────────────
 
 struct AIProfilesCard: View {
     @EnvironmentObject var app: AppState
@@ -839,8 +906,8 @@ struct AIProfilesCard: View {
 
     var body: some View {
         Card {
-            SectionTitle("AI 接口")
-            Text("可保存多个配置方案，选择其一用于翻译与分类。")
+            SectionTitle("模型服务")
+            Text("可配置多个模型服务；当前服务用于翻译与分类。")
                 .font(.system(size: 13)).foregroundStyle(Theme.muted)
 
             ForEach(app.config.aiProfiles) { profile in
@@ -849,7 +916,7 @@ struct AIProfilesCard: View {
                     Image(systemName: active ? "largecircle.fill.circle" : "circle")
                         .foregroundStyle(active ? palette.accent : Theme.muted)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(profile.name.isEmpty ? "未命名方案" : profile.name)
+                        Text(profile.name.isEmpty ? "未命名服务" : profile.name)
                             .font(.system(size: 14, weight: .medium))
                         Text(profile.isComplete ? "\(profile.model) · \(profile.baseURL)" : "尚未配置完整")
                             .font(.system(size: 12)).foregroundStyle(Theme.muted).lineLimit(1)
@@ -860,13 +927,13 @@ struct AIProfilesCard: View {
                 }
                 .padding(10)
                 .background(active ? Theme.panel2 : Color.clear)
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(active ? palette.accentLine.opacity(0.75) : Theme.line, lineWidth: 1))
-                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .overlay(RoundedRectangle(cornerRadius: Theme.nestedCardRadius, style: .continuous).stroke(active ? palette.accentLine.opacity(0.75) : Theme.line, lineWidth: 1))
+                .clipShape(RoundedRectangle(cornerRadius: Theme.nestedCardRadius, style: .continuous))
                 .contentShape(Rectangle())
                 .onTapGesture { app.selectAIProfile(profile.id) }
             }
 
-            Button("添加方案") { app.addAIProfile() }.buttonStyle(OutlineButtonStyle())
+            Button("新增服务") { app.addAIProfile() }.buttonStyle(OutlineButtonStyle())
 
             if let binding = app.activeProfileBinding() {
                 Divider().overlay(Theme.line).padding(.vertical, 4)
@@ -877,7 +944,7 @@ struct AIProfilesCard: View {
 
     @ViewBuilder private func editor(_ p: Binding<AIProfile>) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            field("方案名称", p.name)
+            field("服务名称", p.name)
             field("接口地址（Base URL）", p.baseURL)
             Text(verbatim: "接口地址通常以 /v1 结尾；也可填写完整的 /chat/completions 路径。")
                 .font(.system(size: 12)).foregroundStyle(Theme.muted)

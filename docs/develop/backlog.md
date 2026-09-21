@@ -6,7 +6,7 @@
 
 ### 人工复筛安全导入与问题生命周期（2026-07-12）
 
-- 数据页“导入复筛结果”已有 `?` 简明说明；完整规则见[人工复筛与 CSV 导入](guide/manual-review.md)。
+- 数据页“导入复筛结果”已有 `?` 简明说明；完整规则见[人工复筛与 CSV 导入](../guide/manual-review.md)。
 - CSV 只以 `epmc_id` 匹配，只读取 `include` 与 `tags`；`include` 只接受 `yes` / `no`，空白不改变原值。
 - 导入先预检：重复 ID、非法值、缺 ID、缺必要列会阻止写入；未匹配 ID 和覆盖冲突可见。
 - 已有 `include` / `tags` 默认不覆盖；用户可显式开启覆盖并再次确认。
@@ -22,7 +22,7 @@
 - 检索式增加归档与版本 UI；当前编辑列表只影响后续下载，旧下载记录仍保留。
 - 迁移过程保留旧列只读兼容，先校验数量，再允许高级维护永久清理。
 
-完整的目标结构与兼容迁移见[数据库](architecture/database.md#question-query-lifecycle)。
+完整的目标结构与兼容迁移见[数据库](../reference/database.md#question-query-lifecycle)。
 
 ### 检索后按期刊 / 类型剔除结果
 

@@ -1,0 +1,289 @@
+/* Body: system UI fonts (no CJK webfont). Code: self-hosted JetBrains Mono. */
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 100 800;
+  font-display: swap;
+  src: url("../fonts/JetBrainsMono-Variable.woff2") format("woff2");
+}
+
+:root {
+  --md-text-font: system-ui, -apple-system, "Segoe UI", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", "Noto Sans SC",
+    sans-serif;
+  --md-code-font: "JetBrains Mono", ui-monospace, "SF Mono", "Cascadia Code",
+    Consolas, "Liberation Mono", monospace;
+}
+
+/*
+ * Header: slightly larger title/icons than Material defaults, but keep the
+ * bar near the default ~2.4rem row (do not let logo padding inflate height).
+ */
+.md-header__title {
+  height: 2.4rem;
+  line-height: 2.4rem;
+  font-size: 1.05rem;
+}
+
+.md-header__button {
+  margin: 0.15rem;
+  padding: 0.25rem;
+}
+
+.md-header__button.md-logo {
+  margin: 0.15rem;
+  padding: 0.2rem;
+}
+
+.md-header__button.md-logo img,
+.md-header__button.md-logo svg {
+  height: 1.65rem;
+  width: auto;
+}
+
+.md-nav__title .md-nav__button.md-logo img,
+.md-nav__title .md-nav__button.md-logo svg {
+  height: 2.6rem;
+}
+
+.md-header__button.md-icon svg {
+  height: 1.3rem;
+  width: 1.3rem;
+}
+
+.md-search__input {
+  font-size: 0.95rem;
+}
+
+.md-search__icon.md-icon svg {
+  height: 1.25rem;
+  width: 1.25rem;
+}
+
+.md-header__source {
+  font-size: 0.75rem;
+}
+
+/*
+ * Desktop search: icon only; centered fixed panel.
+ * Animate opacity/transform (not header flex width) so open/close stays smooth
+ * without collapsing theme / language / GitHub controls.
+ */
+@media screen and (min-width: 60em) {
+  .md-header__button[for="__search"] {
+    display: inline-block;
+  }
+
+  /* Keep sibling header controls visible; they must not run Material's hide animation */
+  .md-header__option {
+    transition: none !important;
+  }
+
+  [data-md-toggle="search"]:checked ~ .md-header .md-header__option {
+    max-width: none !important;
+    opacity: 1 !important;
+  }
+
+  .md-search {
+    position: static;
+    padding: 0;
+  }
+
+  .md-search__form {
+    height: 2.4rem;
+    border-radius: 0.1rem;
+  }
+
+  /* Always centered; closed = invisible (no layout effect on the header row) */
+  .md-search__inner {
+    position: fixed !important;
+    top: 0.75rem;
+    left: 50%;
+    float: none !important;
+    width: min(40rem, calc(100vw - 2rem)) !important;
+    padding: 0 !important;
+    overflow: hidden;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transform: translateX(-50%) translateY(-0.35rem) scale(0.98);
+    transition:
+      opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+      transform 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+      visibility 0s linear 0.2s !important;
+    z-index: 5;
+  }
+
+  [data-md-toggle="search"]:checked ~ .md-header .md-search__inner {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    overflow: visible;
+    transform: translateX(-50%) translateY(0) scale(1);
+    transition:
+      opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+      transform 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+      visibility 0s linear 0s !important;
+  }
+
+  .md-search__scrollwrap {
+    width: 100% !important;
+    max-width: none;
+  }
+
+  /* Dim backdrop fades with the panel */
+  .md-search__overlay {
+    transition: width 0s, height 0s, opacity 0.2s ease !important;
+  }
+
+  [data-md-toggle="search"]:checked ~ .md-header .md-search__overlay {
+    transition: width 0s, height 0s, opacity 0.2s ease !important;
+  }
+
+  [data-md-toggle="search"]:checked ~ .md-header .md-search__output {
+    top: 2.4rem; /* match our taller form so the status strip sits flush under the input */
+    transition: opacity 0.2s ease 0.05s;
+  }
+
+  /*
+   * “键入以开始搜索” lives in .md-search-result__meta (result status strip),
+   * not the input placeholder. Material left-pads 2.2rem for a narrow side
+   * panel; on a wide centered panel that looks stranded. Center it instead.
+   * Also keep the input placeholder visible (Material clears it when open).
+   */
+  [data-md-toggle="search"]:checked ~ .md-header .md-search__input::placeholder {
+    color: var(--md-default-fg-color--light) !important;
+  }
+
+  .md-search-result__meta {
+    text-align: center;
+    padding-left: 0.8rem !important;
+    padding-right: 0.8rem !important;
+    font-size: 0.75rem;
+  }
+}
+
+/*
+ * Page-switch flash between left nav and content: usually the primary
+ * sidebar’s thin scrollbar thumb appearing while TOC/nav reflows
+ * (especially with toc.integrate). Keep gutter stable and only show the
+ * thumb on hover so it does not blink as a “pull bar”.
+ */
+html {
+  scrollbar-gutter: stable;
+}
+
+.md-sidebar__scrollwrap {
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.md-sidebar__scrollwrap:hover,
+.md-sidebar__scrollwrap:focus-within {
+  scrollbar-color: var(--md-default-fg-color--lighter) transparent;
+}
+
+.md-sidebar__scrollwrap::-webkit-scrollbar {
+  width: 0.25rem;
+}
+
+.md-sidebar__scrollwrap::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  border-radius: 0.125rem;
+}
+
+.md-sidebar__scrollwrap:hover::-webkit-scrollbar-thumb,
+.md-sidebar__scrollwrap:focus-within::-webkit-scrollbar-thumb {
+  background-color: var(--md-default-fg-color--lighter);
+}
+
+/*
+ * Grid cards: fill a touch deeper than the page so tiles read as surfaces.
+ * Uses theme colours so light/dark both stay subtle.
+ */
+.md-typeset .grid.cards > ul > li,
+.md-typeset .grid.cards > ol > li,
+.md-typeset .grid > .card {
+  background-color: color-mix(
+    in srgb,
+    var(--md-default-bg-color) 88%,
+    var(--md-default-fg-color) 12%
+  );
+  border-radius: 0.4rem; /* Material default ~0.1rem; a bit rounder */
+}
+
+/* Overview pipeline figure (static SVG — no Mermaid runtime) */
+.md-typeset img.diagram-img {
+  display: block;
+  width: 100%;
+  max-width: 32rem;
+  margin: 1em auto;
+  height: auto;
+}
+
+/* Showcase-only: hide raw mermaid source until client render (if used) */
+pre.mermaid {
+  height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  opacity: 0 !important;
+  border: 0 !important;
+}
+
+.no-js pre.mermaid {
+  height: auto !important;
+  margin: 1em 0 !important;
+  padding: 0.8em !important;
+  overflow: auto !important;
+  opacity: 1 !important;
+}
+
+/*
+ * Overview hides left nav (page meta hide: navigation) but must not shift
+ * the content column. Material sets:
+ *   .md-sidebar { width: 12.1rem }
+ *   [hidden] → display:none (flex slot collapses)
+ *   .md-sidebar--primary:not([hidden]) ~ .md-content > .md-content__inner
+ *     { margin-left: 1.2rem }  (desktop)
+ * Keep the primary flex slot + the same content margin when [hidden].
+ */
+@media screen and (min-width: 76.25em) {
+  .md-sidebar--primary[hidden] {
+    /* Keep width in the flex row; do not show the nav */
+    display: block !important;
+    visibility: hidden;
+    pointer-events: none;
+    width: 12.1rem;
+    flex-shrink: 0;
+    overflow: hidden;
+  }
+
+  /* Same content inset as when primary nav is visible */
+  [dir="ltr"]
+    .md-sidebar--primary[hidden]
+    ~ .md-content
+    > .md-content__inner {
+    margin-left: 1.2rem;
+  }
+
+  [dir="rtl"]
+    .md-sidebar--primary[hidden]
+    ~ .md-content
+    > .md-content__inner {
+    margin-right: 1.2rem;
+  }
+}
+
+/*
+ * Nested page links under a section (e.g. 开始使用 → 快速上手):
+ * only extra left indent — no position/background/layout changes.
+ */
+@media screen and (min-width: 76.25em) {
+  .md-nav--primary .md-nav[data-md-level="1"] > .md-nav__list > .md-nav__item > a.md-nav__link {
+    padding-inline-start: 1.1rem;
+  }
+}
+
+

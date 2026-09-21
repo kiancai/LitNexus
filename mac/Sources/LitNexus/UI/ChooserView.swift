@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 struct ChooserView: View {
     @EnvironmentObject var app: AppState
@@ -10,15 +11,27 @@ struct ChooserView: View {
         let docs = home.appendingPathComponent("Documents")
         var isDir: ObjCBool = false
         let base = FileManager.default.fileExists(atPath: docs.path, isDirectory: &isDir) && isDir.boolValue ? docs : home
-        return base.appendingPathComponent("文献项目")
+        return base.appendingPathComponent("LitNexusDB")
     }
 
     var body: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "testtube.2").font(.system(size: 49)).foregroundStyle(palette.accent)
+        VStack(spacing: 0) {
+            Group {
+                if let url = Bundle.main.url(forResource: "litnexus-mark", withExtension: "png"),
+                   let ns = NSImage(contentsOf: url) {
+                    Image(nsImage: ns)
+                        .resizable().scaledToFit()
+                        .frame(width: 88, height: 88)
+                } else {
+                    Image(systemName: "books.vertical")
+                        .font(.system(size: 49))
+                        .foregroundStyle(palette.accent)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .center)
+            .padding(.bottom, 10)
             Text("LitNexus").font(.system(size: 31, weight: .bold))
-            Text("选择一个项目文件夹，所有数据都保存在其中")
-                .font(.callout).foregroundStyle(Theme.muted)
+            .padding(.bottom, 20)
 
             Card {
                 Text("项目文件夹").font(.system(size: 13)).foregroundStyle(Theme.muted)
@@ -38,8 +51,6 @@ struct ChooserView: View {
                         app.openOrCreate(URL(fileURLWithPath: (path as NSString).expandingTildeInPath))
                     }.buttonStyle(PrimaryButtonStyle())
                 }
-                Text("若文件夹已存在则打开，否则新建。")
-                    .font(.system(size: 12)).foregroundStyle(Theme.muted)
 
                 let recent = WorkspaceStore.listRecent()
                 if !recent.isEmpty {
@@ -56,5 +67,8 @@ struct ChooserView: View {
             .frame(width: 440)
         }
         .padding(40)
+        .sheet(item: $app.pendingInit) { pending in
+            WorkspaceInitSheet(pending: pending)
+        }
     }
 }

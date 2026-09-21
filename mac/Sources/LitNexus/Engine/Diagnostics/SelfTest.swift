@@ -26,30 +26,53 @@ enum SelfTest {
 
             // 配置默认值 + 往返
             var cfg = try ConfigStore.load(ws.configPath)
+            check("默认下载时间窗口为 14 天", cfg.download.days == DownloadConfig.defaultDays)
+            check("下载时间窗口至少为 1 天", DownloadConfig.normalizedDays(0) == 1)
+            check("Europe PMC 每页数量限制为 1–1000",
+                  DownloadConfig.normalizedPageSize(0) == 1
+                    && DownloadConfig.normalizedPageSize(1001) == 1000)
+            check("分页间隔不能为负数", DownloadConfig.normalizedRequestDelay(-0.5) == 0)
             check("默认期刊（toml）含示例", cfg.download.journals.contains("Nature"))
             check("默认关键词（toml）非空", cfg.download.keywords.contains { $0.contains("microbiome") })
-            check("默认两个问题", cfg.classify.questions.map(\.id) == ["q1", "q2"])
+            check("默认一个问题", cfg.classify.questions.map(\.id) == ["q1"])
             check("AI 无默认值", cfg.ai.baseURL.isEmpty && cfg.ai.model.isEmpty)
             check("默认标注列 include/tags", cfg.schema.customColumns == ["include", "tags"])
             check("默认项目主题色为默认 teal", cfg.theme.accentHue == nil)
 
-            let prof = AIProfile(name: "test", baseURL: "https://example.com/v1", model: "test-model")
-            cfg.aiProfiles = [prof]
-            cfg.activeAIID = prof.id
+            let prof = AIProfile(name: "主方案", baseURL: "https://example.com/v1", model: "test-model")
+            let backupProfile = AIProfile(
+                name: "备用方案",
+                baseURL: "https://backup.example.com/v1",
+                model: "backup-model",
+                apiKey: "backup-key",
+                extraParams: "{\"reasoning_effort\":\"minimal\"}"
+            )
+            cfg.aiProfiles = [prof, backupProfile]
+            cfg.activeAIID = backupProfile.id
             cfg.download.days = 7
             cfg.download.journals = ["Nature", "# 注释", "Cell"]
             cfg.download.keywords = ["(a OR b) AND \"c d\""]
             cfg.theme.accentHue = 0.71
+            let fixtureQuestionID = cfg.classify.allocateQuestionID()
+            cfg.classify.questions.append(Question(
+                id: fixtureQuestionID,
+                nickname: "核心方向",
+                text: "自检用的第二个分类问题"
+            ))
+            check("新增问题从 q2 开始", fixtureQuestionID == "q2")
             try ConfigStore.save(cfg, to: ws.configPath)
             let reloaded = try ConfigStore.load(ws.configPath)
-            check("配置往返：base_url", reloaded.ai.baseURL == "https://example.com/v1")
+            check("配置往返：多个模型服务保留", reloaded.aiProfiles.count == 2)
+            check("配置往返：当前模型服务", reloaded.activeAIID == backupProfile.id
+                && reloaded.ai.baseURL == "https://backup.example.com/v1")
+            check("配置往返：AI 额外参数", reloaded.ai.extraParams == "{\"reasoning_effort\":\"minimal\"}")
             check("配置往返：days", reloaded.download.days == 7)
             check("配置往返：journals 数组", reloaded.download.journals == ["Nature", "# 注释", "Cell"])
             check("配置往返：keywords 含引号检索式", reloaded.download.keywords == ["(a OR b) AND \"c d\""])
             check("配置往返：项目强调色", reloaded.theme.accentHue == 0.71)
             check("检索式过滤注释/空行", EPMCClient.filterQueries(reloaded.download.journals) == ["Nature", "Cell"])
-            check("配置往返：问题保留", reloaded.classify.questions.map(\.id) == ["q1", "q2"])
-            check("配置往返：昵称保留", reloaded.classify.questions.first?.nickname == "生物医学领域")
+            check("配置往返：新增问题保留", reloaded.classify.questions.map(\.id) == ["q1", "q2"])
+            check("配置往返：昵称保留", reloaded.classify.questions.first?.nickname == "是否属于生物医学领域")
             check("默认翻译摘要为开", reloaded.translate.translateAbstract)
 
             // 问题模型：classify/export 开关 + 永不复用 id
@@ -194,7 +217,7 @@ enum SelfTest {
             check("综合评估导出记录=1",
                   try evalDB.exportHumanExcludedButAllAIApproved(questions: cfg.classify.questions, to: promptCSV) == 1)
             let (promptHeader, promptRows) = CSV.parseWithHeader(try String(contentsOf: promptCSV, encoding: .utf8))
-            check("综合评估 CSV 含每个问题答案", promptHeader.contains("生物医学领域 · AI 答案"))
+            check("综合评估 CSV 含每个问题答案", promptHeader.contains("是否属于生物医学领域 · AI 答案"))
             check("综合评估 CSV 仅导出 EV2", promptRows.map { $0["EPMC ID"] } == ["EV2"])
 
             // EPMC JSON → 字段映射
@@ -238,7 +261,7 @@ enum SelfTest {
             let (hdr, _) = CSV.parseWithHeader(csvText)
             check("CSV 表头含 epmc_id", hdr.contains("epmc_id"))
             check("CSV 排除 journal_info_json", !hdr.contains("journal_info_json"))
-            check("CSV 表头用问题昵称", hdr.contains("生物医学领域 · 答案"))
+            check("CSV 表头用问题昵称", hdr.contains("是否属于生物医学领域 · 答案"))
 
             // 导出开关=关 → 该问题两列被排除
             var cfgNoExport = cfg
@@ -246,7 +269,7 @@ enum SelfTest {
             let csvOut2 = ws.exportsDir.appendingPathComponent("out2.csv")
             _ = try Pipeline.exportArticles(db: dbv, config: cfgNoExport, filterMode: "all", output: csvOut2)
             let (hdr2, _) = CSV.parseWithHeader(try String(contentsOf: csvOut2, encoding: .utf8))
-            check("导出关闭的问题列被排除", !hdr2.contains("生物医学领域 · 答案"))
+            check("导出关闭的问题列被排除", !hdr2.contains("是否属于生物医学领域 · 答案"))
 
             // 归档问题保留数据库历史，但不能再出现在默认人工复筛导出中。
             var cfgArchivedExport = cfg
@@ -256,7 +279,7 @@ enum SelfTest {
                 db: dbv, config: cfgArchivedExport, filterMode: "all", output: csvOutArchived)
             let (archivedHeader, _) = CSV.parseWithHeader(
                 try String(contentsOf: csvOutArchived, encoding: .utf8))
-            check("归档问题默认不导出", !archivedHeader.contains("生物医学领域 · 答案"))
+            check("归档问题默认不导出", !archivedHeader.contains("是否属于生物医学领域 · 答案"))
             check("未归档问题仍正常导出", archivedHeader.contains("核心方向 · 答案"))
 
             // 永久删除问题：DROP 掉 q2_ans/q2_rea

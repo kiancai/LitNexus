@@ -43,6 +43,9 @@ enum ConfigStore {
             if let arr = d["keywords"]?.tomlValue.array {
                 cfg.download.keywords = arr.compactMap { $0.tomlValue.string }
             }
+            cfg.download.days = DownloadConfig.normalizedDays(cfg.download.days)
+            cfg.download.pageSize = DownloadConfig.normalizedPageSize(cfg.download.pageSize)
+            cfg.download.requestDelay = DownloadConfig.normalizedRequestDelay(cfg.download.requestDelay)
         }
         // 旧项目迁移：toml 里没有 journals/keywords 时，从同目录的 journals.txt / keywords.txt(+keywords/) 读入。
         let hasJournalsKey = (table["download"]?.tomlValue.table?["journals"]) != nil
@@ -151,9 +154,9 @@ enum ConfigStore {
         let root = TOMLTable()
 
         let download = TOMLTable()
-        download["days"] = cfg.download.days
-        download["page_size"] = cfg.download.pageSize
-        download["request_delay"] = cfg.download.requestDelay
+        download["days"] = DownloadConfig.normalizedDays(cfg.download.days)
+        download["page_size"] = DownloadConfig.normalizedPageSize(cfg.download.pageSize)
+        download["request_delay"] = DownloadConfig.normalizedRequestDelay(cfg.download.requestDelay)
         let journalsArr = TOMLArray()
         for j in cfg.download.journals { journalsArr.append(j) }
         download["journals"] = journalsArr

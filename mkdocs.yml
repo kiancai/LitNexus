@@ -1,47 +1,44 @@
-# LitNexus 文档站 — MkDocs Material
-# 本地预览:  pip install -r docs/requirements.txt && mkdocs serve
-# 构建:      mkdocs build
-# 线上:      https://kiancai.github.io/LitNexus/
-
 site_name: LitNexus
-site_description: 文献发现与筛选流水线 — 设计、使用与开发文档
+site_description: LitNexus - 文献发现与筛选流水线
 site_url: https://kiancai.github.io/LitNexus/
 repo_url: https://github.com/kiancai/LitNexus
 repo_name: kiancai/LitNexus
-edit_uri: edit/main/docs/
 
 docs_dir: docs
 site_dir: site
 
 theme:
   name: material
+  custom_dir: overrides
   language: zh
+  logo: assets/brand/litnexus-mark.png
+  favicon: assets/brand/favicon.png
   palette:
     - media: "(prefers-color-scheme: light)"
       scheme: default
-      primary: indigo
-      accent: blue
+      primary: brown
+      accent: red
       toggle:
-        icon: material/brightness-7
+        icon: material/lightbulb
         name: 切换到深色模式
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
-      primary: indigo
-      accent: blue
+      primary: black
+      accent: light blue
       toggle:
-        icon: material/brightness-4
+        icon: material/lightbulb-outline
         name: 切换到浅色模式
+
+  font: false
   features:
-    - navigation.instant
     - navigation.tracking
     - navigation.tabs
     - navigation.sections
-    - navigation.top
+    - navigation.footer
     - search.suggest
     - search.highlight
     - content.code.copy
-    - content.action.edit
-    - toc.follow
+    - content.tooltips
   icon:
     repo: fontawesome/brands/github
 
@@ -50,44 +47,132 @@ plugins:
       lang:
         - zh
         - en
+  - i18n:
+      docs_structure: suffix
+      fallback_to_default: false
+      reconfigure_material: true
+      reconfigure_search: true
+      languages:
+        - locale: zh
+          default: true
+          name: 简体中文
+          build: true
+          link: /
+        - locale: en
+          name: English
+          build: true
+          link: /en/
+          site_description: LitNexus - literature discovery and screening workflow
+          theme:
+            language: en
+            palette:
+              - media: "(prefers-color-scheme: light)"
+                scheme: default
+                primary: brown
+                accent: red
+                toggle:
+                  icon: material/lightbulb
+                  name: Switch to dark mode
+              - media: "(prefers-color-scheme: dark)"
+                scheme: slate
+                primary: black
+                accent: light blue
+                toggle:
+                  icon: material/lightbulb-outline
+                  name: Switch to light mode
+          nav:
+            - Overview: index.md
+            - Get started:
+                - Installation & quick start: start/quickstart.md
+                - FAQ: start/faq.md
+                - Component samples: start/showcase.md
+            - Guides:
+                - Initial setup: guide/setup.md
+                - Run: guide/run.md
+                - Data: guide/data.md
+                - Statistics: guide/statistics.md
+                - Settings: guide/settings.md
+            - Concepts & reference:
+                - Product overview & motivation: reference/product.md
+                - Scope & boundaries: reference/scope.md
+                - Pipeline & data flow: reference/pipeline.md
+                - Workspace & configuration: reference/workspace.md
+                - Database: reference/database.md
+            - Development & progress:
+                - Architecture overview: develop/architecture.md
+                - Platform strategy: develop/platforms.md
+                - Roadmap: develop/roadmap.md
+                - Feature backlog: develop/backlog.md
 
 markdown_extensions:
+  - abbr
   - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.caret
+  - pymdownx.mark
+  - pymdownx.tilde
+  - pymdownx.critic
   - pymdownx.details
-  - pymdownx.superfences
   - pymdownx.highlight:
       anchor_linenums: true
   - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.smartsymbols
+  - pymdownx.snippets
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
   - pymdownx.tabbed:
       alternate_style: true
   - pymdownx.tasklist:
       custom_checkbox: true
-  - tables
-  - toc:
-      permalink: true
-  - attr_list
-  - md_in_html
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
 
 extra:
   social:
     - icon: fontawesome/brands/github
       link: https://github.com/kiancai/LitNexus
+      name: GitHub
+
+extra_css:
+  - assets/stylesheets/typography.css
+
+extra_javascript:
+  - assets/javascripts/platform-tab.js
 
 nav:
-  - 首页: index.md
-  - 产品:
-      - 概述与动机: product/overview.md
-      - 目标与边界: product/scope.md
-  - 架构:
-      - 总览: architecture/overview.md
-      - 流水线与数据流: architecture/pipeline.md
-      - 工作区与配置: architecture/workspace.md
-      - 数据库: architecture/database.md
-      - 多端策略: architecture/platforms.md
-  - 使用:
-      - 快速开始: guide/quickstart.md
-      - 工作区: guide/workspace.md
-      - 人工复筛与 CSV 导入: guide/manual-review.md
-      - 页面说明与帮助: guide/page-help.md
-  - 路线图: roadmap.md
-  - 功能备忘: backlog.md
+  - 概览: index.md
+  - 开始使用:
+      - 快速上手: start/quickstart.md
+      - 常见问题: start/faq.md
+      - 组件示例（选型用）: start/showcase.md
+  - 使用指南:
+      - 首次设置: guide/setup.md
+      - 运行: guide/run.md
+      - 数据: guide/data.md
+      - 统计: guide/statistics.md
+      - 配置: guide/settings.md
+      - 检索式生成: guide/retrieval.md
+  - 原理与参考:
+      - 产品概述与动机: reference/product.md
+      - 目标与边界: reference/scope.md
+      - 流水线与数据流: reference/pipeline.md
+      - 工作区与配置: reference/workspace.md
+      - 数据库: reference/database.md
+  - 开发与进度:
+      - 架构总览: develop/architecture.md
+      - 多端策略: develop/platforms.md
+      - 路线图: develop/roadmap.md
+      - 功能备忘: develop/backlog.md
+
+copyright: Copyright &copy; 2026 LitNexus

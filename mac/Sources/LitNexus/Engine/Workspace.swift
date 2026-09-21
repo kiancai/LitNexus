@@ -132,4 +132,37 @@ enum WorkspaceStore {
         if makeActive { setActive(ws.root) }
         return ws
     }
+
+    /// 所选目录是否是"就地初始化会很危险"的位置：用户家目录、常见系统目录、云盘根。
+    /// 命中时只允许在其中新建子文件夹，禁止直接就地初始化。
+    static func isDangerousPath(_ url: URL) -> Bool {
+        let fm = FileManager.default
+        let home = fm.homeDirectoryForCurrentUser.path
+        let p = url.standardizedFileURL.path
+        let exact = [
+            home,
+            "\(home)/Desktop", "\(home)/Documents", "\(home)/Downloads",
+            "\(home)/Movies", "\(home)/Music", "\(home)/Pictures",
+            "\(home)/Dropbox", "\(home)/OneDrive", "\(home)/Google Drive",
+            "\(home)/Library/Mobile Documents/com~apple~CloudDocs",
+            "/", "/Applications", "/System",
+        ]
+        if exact.contains(p) { return true }
+        // ~/Library/CloudStorage 下的直接子目录视为各云盘根
+        let cloudRoot = "\(home)/Library/CloudStorage"
+        if p != cloudRoot, p.hasPrefix("\(cloudRoot)/") {
+            let rel = String(p.dropFirst(cloudRoot.count + 1))
+            if !rel.contains("/") { return true }
+        }
+        return false
+    }
+
+    /// 在 parent 下为 name 生成不冲突的子目录名（重名则追加 -2、-3…）。
+    static func uniquedSubfolderName(_ name: String, in parent: URL) -> String {
+        let fm = FileManager.default
+        if !fm.fileExists(atPath: parent.appendingPathComponent(name).path) { return name }
+        var i = 2
+        while fm.fileExists(atPath: parent.appendingPathComponent("\(name)-\(i)").path) { i += 1 }
+        return "\(name)-\(i)"
+    }
 }

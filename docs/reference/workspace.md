@@ -4,7 +4,7 @@
 
 ```text
 <root>/
-├── litnexus.toml    # 项目配置：检索列表、AI 方案、问题、下载参数、主题色
+├── litnexus.toml    # 项目配置：检索列表、模型服务、问题、下载参数、主题色
 ├── litnexus.db      # SQLite 数据库（WAL）
 ├── downloads/       # 原始 JSONL（含 _merged/）
 └── exports/         # 导出的 CSV、对照结果等
@@ -24,6 +24,9 @@ Mac 当前把期刊清单和关键词检索式与其他项目配置一起保存�
 
 ```toml
 [download]
+days = 14
+page_size = 1000
+request_delay = 0.5
 journals = ["Nature", "Bioinformatics"]
 keywords = [
   "(microbiome OR microbiota) AND \"machine learning\"",
@@ -31,6 +34,9 @@ keywords = [
 ]
 ```
 
+- `days`：运行页使用的项目默认时间窗口；新项目为 14 天，在运行页修改后自动保存。
+- `page_size`：每次 Europe PMC 分页请求返回的文献数，有效范围为 1–1,000。
+- `request_delay`：同一检索式连续翻页时的等待秒数，必须为非负数。
 - `journals`：期刊下载通道使用的期刊名。
 - `keywords`：关键词下载通道使用的 Europe PMC 检索式。
 - 每一项是一条字符串；空行或以 `#` 开头的项可作为编辑时的分隔／注释，下载时会跳过。
@@ -45,7 +51,7 @@ keywords = [
 ## 其他配置
 
 - 分类问题：`[[classify.questions]]`；每项有稳定 `id`、显示昵称和问题文本。
-- AI 方案：保存在 TOML 中，可在应用内添加、选择、删除和编辑，改动自动保存。
+- 模型服务：保存在 `[ai].profiles` 数组中，`[ai].active` 记录当前服务。可在首次向导或应用内添加、选择、删除和编辑，改动自动保存；一次翻译／分类运行只使用当前服务。
 - 导出选项和自定义人工标注列：保存在 TOML 中。
 - 项目强调色：可写入 `[theme].accent_hue`；浅色 / 深色 / 跟随系统是本机显示偏好，不写入项目。
 

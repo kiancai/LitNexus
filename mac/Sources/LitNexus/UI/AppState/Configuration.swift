@@ -39,11 +39,11 @@ enum QuestionLifecycleError: Error, LocalizedError {
 }
 
 extension AppState {
-    // ── AI 方案管理（增删选立即持久化）─────────────────────────────────────────
+    // ── 模型服务管理（增删选立即持久化）────────────────────────────────────────
 
     @discardableResult
     func addAIProfile() -> String {
-        let p = AIProfile(name: "方案 \(config.aiProfiles.count + 1)")
+        let p = AIProfile(name: "服务 \(config.aiProfiles.count + 1)")
         config.aiProfiles.append(p)
         config.activeAIID = p.id
         persistConfig()
@@ -73,6 +73,32 @@ extension AppState {
         try? ConfigStore.save(config, to: ws.configPath)
     }
 
+    /// 运行页的时间窗口是当前项目的持久默认值。这里只原子写 TOML，不重开数据库，
+    /// 因而修改一个数字不会触发 schema／问题元数据同步或统计刷新。
+    func setDownloadDays(_ value: Int) {
+        guard value >= 1 else {
+            downloadDays = config.download.days
+            toast = "下载时间窗口至少为 1 天"
+            return
+        }
+        guard value != config.download.days else {
+            downloadDays = value
+            return
+        }
+        guard let ws = workspace else { return }
+
+        var updated = config
+        updated.download.days = value
+        do {
+            try ConfigStore.save(updated, to: ws.configPath)
+            config = updated
+            downloadDays = value
+        } catch {
+            downloadDays = config.download.days
+            toast = "保存下载时间窗口失败：\(error.localizedDescription)"
+        }
+    }
+
     // ── 项目主题色（仅写配置，不触发数据库重开或统计刷新）──────────────────────
 
     /// 保存项目强调色。`nil` 恢复默认 teal；外观模式仍由本机 UserDefaults 单独管理。
@@ -94,7 +120,7 @@ extension AppState {
         )
     }
 
-    // ── 分类问题管理（增删改即时持久化，仿 AI 方案）─────────────────────────────
+    // ── 分类问题管理（增删改即时持久化，仿模型服务）──────────────────────────────
 
     /// 创建一个全新的问题。默认只面向随后合并的新文章；这避免用户仅因新增一个
     /// 问题就在下一次常规流水线中无提示地补答整个历史库。
@@ -104,13 +130,16 @@ extension AppState {
         text: String = "",
         coverage: QuestionCoverage = .futureArticles
     ) -> String {
+        let cleanNickname = nickname.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanNickname.isEmpty, !cleanText.isEmpty else { return "" }
         var updated = config
         let id = updated.classify.allocateQuestionID()
         let frontier = coverage == .futureArticles ? captureQuestionFrontier() : nil
         updated.classify.questions.append(Question(
             id: id,
-            nickname: nickname,
-            text: text,
+            nickname: cleanNickname,
+            text: cleanText,
             classify: true,
             export: true,
             classifyAfterRowID: frontier
@@ -129,6 +158,19 @@ extension AppState {
             get: { self.config.classify.questions[idx] },
             set: { self.config.classify.questions[idx] = $0; self.persistConfig() }
         )
+    }
+
+    /// 问题昵称是导出和列表中的稳定人工标签；新编辑不允许保存为空。
+    /// 旧项目若已有空值，仍由读取兼容逻辑保留，避免破坏历史配置。
+    func updateQuestionNickname(_ id: String, _ nickname: String) {
+        let cleanNickname = nickname.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanNickname.isEmpty else {
+            toast = "问题昵称不能为空。"
+            return
+        }
+        guard let index = config.classify.questions.firstIndex(where: { $0.id == id }) else { return }
+        config.classify.questions[index].nickname = cleanNickname
+        persistConfig()
     }
 
     /// 该问题是否已有 AI 答案（决定改文本时是否需要知情确认）。

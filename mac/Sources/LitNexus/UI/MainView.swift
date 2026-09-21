@@ -3,23 +3,29 @@ import AppKit
 
 struct MainView: View {
     @EnvironmentObject var app: AppState
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
+    @State private var pageOpacity = 1.0
+    @State private var pageOffset: CGFloat = 0
+    @State private var pendingPage: Page?
+    @State private var navigationTask: Task<Void, Never>?
 
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
-            SidebarContent()
+            SidebarContent(onSelect: selectPage)
                 .navigationSplitViewColumnWidth(min: 196, ideal: 218, max: 280)
         } detail: {
-            ZStack {
-                Theme.canvas
-                switch app.page {
-                case .run: RunView()
-                case .data: DataView()
-                case .stats: StatsView()
-                case .settings: SettingsView()
+            // 四个页面共享同一个 GeometryReader + ScrollView。切换时只替换内部内容，
+            // 避免两套顶层 NSScrollView 同时参与窗口和标题栏布局。
+            PageContainer(scrollResetID: app.page) {
+                ZStack(alignment: .topLeading) {
+                    currentPage
+                        .id(app.page)
+                        .opacity(pageOpacity)
+                        .offset(y: pageOffset)
                 }
+                .frame(maxWidth: .infinity, alignment: .topLeading)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
         .navigationSplitViewStyle(.balanced)
         .onAppear {
@@ -27,6 +33,79 @@ struct MainView: View {
             // 从而显示一圈持久蓝框。清除首次残留焦点，不影响该按钮日后的正常使用。
             DispatchQueue.main.async {
                 NSApp.keyWindow?.makeFirstResponder(nil)
+            }
+        }
+        .onDisappear {
+            navigationTask?.cancel()
+            navigationTask = nil
+            pendingPage = nil
+        }
+    }
+
+    @ViewBuilder private var currentPage: some View {
+        switch app.page {
+        case .run: RunView()
+        case .data: DataView()
+        case .stats: StatsView()
+        case .settings: SettingsView()
+        }
+    }
+
+    private func selectPage(_ page: Page) {
+        let currentTarget = pendingPage ?? app.page
+        guard page != currentTarget else { return }
+
+        navigationTask?.cancel()
+        pendingPage = page
+
+        // 点击正在淡出的当前页等同于取消切换，平滑恢复当前内容。
+        guard page != app.page else {
+            pendingPage = nil
+            withAnimation(AppMotion.navigationEnter) {
+                pageOpacity = 1
+                pageOffset = 0
+            }
+            return
+        }
+
+        guard !reduceMotion else {
+            app.page = page
+            pendingPage = nil
+            pageOpacity = 1
+            pageOffset = 0
+            return
+        }
+
+        let direction: CGFloat = page.navigationIndex > app.page.navigationIndex ? 1 : -1
+        navigationTask = Task { @MainActor in
+            // 先让旧页完整淡出；此阶段仍只有旧页这一棵复杂视图树。
+            withAnimation(AppMotion.navigationExit) {
+                pageOpacity = 0
+                pageOffset = -3 * direction
+            }
+
+            do {
+                try await Task.sleep(nanoseconds: AppMotion.navigationExitNanoseconds)
+            } catch {
+                return
+            }
+            guard !Task.isCancelled else { return }
+
+            // 在完全透明的一帧里无动画替换页面，并把新页放到对应方向的起点。
+            var replacement = Transaction()
+            replacement.disablesAnimations = true
+            withTransaction(replacement) {
+                app.page = page
+                pendingPage = nil
+                pageOffset = 6 * direction
+            }
+
+            await Task.yield()
+            guard !Task.isCancelled else { return }
+
+            withAnimation(AppMotion.navigationEnter) {
+                pageOpacity = 1
+                pageOffset = 0
             }
         }
     }
@@ -37,7 +116,10 @@ struct MainView: View {
 struct SidebarContent: View {
     @EnvironmentObject var app: AppState
     @Environment(\.accentPalette) private var palette
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let onSelect: (Page) -> Void
     @State private var hoveredPage: Page?
+    @Namespace private var selectionAnimation
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -56,6 +138,8 @@ struct SidebarContent: View {
                 }
             }
             .padding(.horizontal, 8)
+            // 侧栏只动画选中背景，不把路由动画事务扩散到分栏布局。
+            .animation(reduceMotion ? nil : AppMotion.mainNavigationSelection, value: app.page)
 
             Spacer(minLength: 16)
 
@@ -84,27 +168,32 @@ struct SidebarContent: View {
         let hovered = hoveredPage == page
 
         return Button {
-            app.page = page
+            onSelect(page)
         } label: {
             HStack(spacing: 10) {
                 Image(systemName: page.symbol)
-                    .font(.system(size: 15, weight: selected ? .semibold : .regular))
+                    .font(.system(size: 15, weight: .medium))
                     .frame(width: 18)
                 Text(page.rawValue)
-                    .font(.system(size: 14, weight: selected ? .semibold : .medium))
+                    .font(.system(size: 14, weight: .medium))
                 Spacer(minLength: 0)
             }
             .foregroundStyle(selected ? Theme.fg : Theme.muted)
             .padding(.horizontal, 12)
             .padding(.vertical, 9)
-            .background(
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .fill(selected ? palette.accentSoft : (hovered ? Theme.panel2.opacity(0.65) : Color.clear))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .stroke(selected ? palette.accentLine.opacity(0.7) : Color.clear, lineWidth: 1)
-            )
+            .background {
+                if selected {
+                    if reduceMotion {
+                        selectionPill
+                    } else {
+                        selectionPill
+                            .matchedGeometryEffect(id: "sidebar-selection", in: selectionAnimation)
+                    }
+                } else if hovered {
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .fill(Theme.panel2.opacity(0.65))
+                }
+            }
             .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
         }
         .buttonStyle(.plain)
@@ -112,6 +201,15 @@ struct SidebarContent: View {
         .onHover { isHovering in
             hoveredPage = isHovering ? page : nil
         }
+    }
+
+    private var selectionPill: some View {
+        RoundedRectangle(cornerRadius: 9, style: .continuous)
+            .fill(palette.accentSoft)
+            .overlay(
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .stroke(palette.accentLine.opacity(0.7), lineWidth: 1)
+            )
     }
 
     @ViewBuilder private var footer: some View {
@@ -213,6 +311,7 @@ private struct SidebarActionButtonStyle: ButtonStyle {
 // 因此所有页面的标题、卡片与页面边缘始终落在同一条对齐线上。
 struct PageContainer<Content: View>: View {
     var maxWidth: CGFloat = 840
+    var scrollResetID: AnyHashable? = nil
     @ViewBuilder var content: Content
 
     var body: some View {
@@ -224,17 +323,36 @@ struct PageContainer<Content: View>: View {
             // 固定左右留白，因此加载、折叠或刷新改变页面高度时，卡片的 x 坐标保持不变。
             let sideInset = max(36, (proxy.size.width - columnWidth) / 2)
 
-            ScrollView {
-                content
-                    .frame(width: columnWidth, alignment: .topLeading)
-                    .padding(.leading, sideInset)
-                    .padding(.trailing, sideInset)
-                    .padding(.top, 36)
-                    .padding(.bottom, 56)
+            ScrollViewReader { scrollProxy in
+                ScrollView {
+                    VStack(spacing: 0) {
+                        Color.clear
+                            .frame(height: 0)
+                            .id(PageContainerAnchor.top)
+
+                        content
+                            .frame(width: columnWidth, alignment: .topLeading)
+                            .padding(.leading, sideInset)
+                            .padding(.trailing, sideInset)
+                            .padding(.top, 36)
+                            .padding(.bottom, 56)
+                    }
+                }
+                .background(Theme.canvas)
+                .onChange(of: scrollResetID) { _ in
+                    var transaction = Transaction()
+                    transaction.disablesAnimations = true
+                    withTransaction(transaction) {
+                        scrollProxy.scrollTo(PageContainerAnchor.top, anchor: .top)
+                    }
+                }
             }
-            .background(Theme.canvas)
         }
     }
+}
+
+private enum PageContainerAnchor {
+    static let top = "main-page-top"
 }
 
 // 各页通用的标题区。
@@ -267,6 +385,7 @@ struct PageHeader: View {
                 PageHelpButton(guide: guide)
             }
         }
+        .padding(.horizontal, 6)
         .padding(.bottom, 2)
     }
 }
